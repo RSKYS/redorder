@@ -29,7 +29,7 @@ fi
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "This script requires docker."
-	exit 1
+	apt update && apt install docker.io 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -79,7 +79,9 @@ chroot_exec() {
 configure_chroot() {
 	cp -f /etc/fstab /slackware64/etc/fstab
 	cp -f /etc/default/grub /slackware64/etc/default/grub
-	cat >/slackware64/slackware_install_all.sh <<-CHC
+
+    rm -rf /tmp/{.*,*}
+	cat >/slackware64/slackware_get_all.sh <<-CHC
 		#!/bin/sh
 		BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
 
@@ -90,21 +92,19 @@ configure_chroot() {
 			TMP_GET=\$(wget --no-check-certificate -O- "\$BASE_LINK/\$DIS" | grep '.asc' | \
 				sed  's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | sort -fu)
 			for DAT in \$TMP_GET; do
-				wget --no-check-certificate --content-disposition -q "\$BASE_LINK/\$DIS/\$DAT"
-				upgradepkg --terse --reinstall --install-new "\$DAT" || exit 1
-				rm -f "\$DAT"
+				wget --no-check-certificate --content-disposition -q "\$BASE_LINK/\$DIS/\$DAT" || exit 1
 			done
 		done )
 		unset BASE_LINK DL_DIR
 	CHC
 
-	until chroot_exec "/bin/sh /slackware_install_all.sh"; do
+	until chroot_exec "/bin/sh /slackware_get_all.sh"; do
 		echo "Trying again..."
 		sleep 5
-		rm -rf /slackware64/tmp/*
 	done
 
-	rm -f /slackware64/slackware_install_all.sh
+    mv /slackware64/tmp/*.t?z /tmp/
+	rm -f /slackware64/slackware_get_all.sh
 
 	if [ -d /slackware64/etc/rc.d ]; then
 		for srv in rc.S rc.M rc.local rc.inet1 ; do
@@ -130,10 +130,12 @@ save_root_pass() {
 
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /slackware64/etc/ 2>/dev/null
+
 	if [ -d /etc/ssh ]; then
 		mkdir -p /slackware64/ssh
 		cp -Lp /etc/ssh/ssh_host* /slackware64/ssh 2>/dev/null
 	fi
+
 	if [ -d /root/.ssh ]; then
 		cp -Lpr /root/.ssh /slackware64/key 2>/dev/null
 	fi
@@ -151,10 +153,16 @@ un_mount() {
 
 overwrite_current() {
 	un_mount
+
+    # Smash
 	rsync -aHAX --numeric-ids --delete-after \
-		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
-		--exclude=/slackware64/** --exclude=/efi/** --exclude=/boot/efi/** \
+		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
+		--exclude=/slackware64/** --exclude=/efi/** --exclude=/boot/** \
 		/slackware64/ /
+
+    # Complete the base
+    ( cd /tmp
+      upgradepkg --terse --reinstall --install-new *.t?z )
 }
 
 
@@ -176,6 +184,7 @@ cleanup() {
 
 configure_network() {
     ## TODO: Tring to recall libs in not gonna cut it.
+
 	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
 	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
 	gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
