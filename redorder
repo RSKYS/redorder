@@ -29,7 +29,7 @@ fi
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "This script requires docker."
-	apt update && apt install docker.io 2>/dev/null || exit 1
+	apt update && apt install -y docker.io 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -38,9 +38,11 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 fi
 
 extract_bootstrap_and_prepare() {
+    BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
+    DL_DIR="a ap d l n k t tcl x y"
+
 	rm -rf /slackware64
 	mkdir -p /slackware64
-
 	# Extract bootstrap from Docker
 	docker pull aclemons/slackware:current
 	docker create --name slak_tmp aclemons/slackware:current
@@ -69,6 +71,21 @@ extract_bootstrap_and_prepare() {
 	rm -f /slackware64/etc/mtab
 	sed 's/\/slackware64\//\//' /etc/mtab \
 		> /slackware64/etc/mtab
+
+    # Get packages for later
+    ( cd /tmp
+      rm -rf .* * 2>/dev/null || true
+
+      for DIS in $DL_DIR; do
+          TMP_GET=$(wget -O- "$BASE_LINK/$DIS" | grep '.asc' | \
+              sed  's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | sort -fu)
+          for DAT in $TMP_GET; do
+              wget --content-disposition -q "$BASE_LINK/$DIS/$DAT" && \
+                  echo "Downloaded: $DIS/$DAT" || echo "Could not download $DAT"
+          done
+      done )
+
+    unset BASE_LINK DL_DIR
 }
 
 chroot_exec() {
@@ -77,34 +94,8 @@ chroot_exec() {
 
 # Doing shits in chroot
 configure_chroot() {
-	cp -f /etc/fstab /slackware64/etc/fstab
+    cp -f /etc/fstab /slackware64/etc/fstab
 	cp -f /etc/default/grub /slackware64/etc/default/grub
-
-    rm -rf /tmp/{.*,*}
-	cat >/slackware64/slackware_get_all.sh <<-CHC
-		#!/bin/sh
-		BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
-
-		DL_DIR="a ap d l n k t tcl x y"
-
-		( cd /tmp
-		for DIS in \$DL_DIR; do
-			TMP_GET=\$(wget --no-check-certificate -O- "\$BASE_LINK/\$DIS" | grep '.asc' | \
-				sed  's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | sort -fu)
-			for DAT in \$TMP_GET; do
-				wget --no-check-certificate --content-disposition -q "\$BASE_LINK/\$DIS/\$DAT" || exit 1
-			done
-		done )
-		unset BASE_LINK DL_DIR
-	CHC
-
-	until chroot_exec "/bin/sh /slackware_get_all.sh"; do
-		echo "Trying again..."
-		sleep 5
-	done
-
-    mv /slackware64/tmp/*.t?z /tmp/
-	rm -f /slackware64/slackware_get_all.sh
 
 	if [ -d /slackware64/etc/rc.d ]; then
 		for srv in rc.S rc.M rc.local rc.inet1 ; do
@@ -161,19 +152,17 @@ overwrite_current() {
 		/slackware64/ /
 
     # Complete the base
-    ( cd /tmp
-      upgradepkg --terse --reinstall --install-new *.t?z )
+    upgradepkg --terse --reinstall --install-new /tmp/*.t?z
 }
 
 
 restore_root_pass() {
-	if [ -f /slackware64/root.passwd ] ; then
-		if grep -Eq '^root:[^$]+' /slackware64/root.passwd; then
-			sed -i '/^root:/d' /etc/shadow 2>/dev/null
-			cat /slackware64/root.passwd >> /etc/shadow 2>/dev/null
-		else
-			echo "root:0v3rk1ll" | chpasswd
-		fi
+    # Check if no root password, set '0v3rk1ll'
+	if egrep -q '^root:[^$]' "/slackware64/root.passwd"; then
+		echo "root:0v3rk1ll" | chpasswd
+	else
+		sed -i '/^root:/d' /etc/shadow
+		cat "/slackware64/root.passwd" >> /etc/shadow
 	fi
 }
 
