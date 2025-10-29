@@ -77,11 +77,13 @@ extract_bootstrap_and_prepare() {
       rm -rf .* * 2>/dev/null || true
 
       for DIS in $DL_DIR; do
-          TMP_GET=$(wget -O- "$BASE_LINK/$DIS" | grep '.asc' | \
-              sed  's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | sort -fu)
+          TMP_GET=$(wget --timeout=10 --tries=2 -O- "$BASE_LINK/$DIS" | grep '.asc' | \
+                      sed 's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | \
+                      sed '/\.t.z$/!d' | sort -fu)
           for DAT in $TMP_GET; do
-              wget --content-disposition -q "$BASE_LINK/$DIS/$DAT" && \
-                  echo "Downloaded: $DIS/$DAT" || echo "Could not download $DAT"
+              wget --timeout=10 --tries=3 --content-disposition \
+                      -q -c "$BASE_LINK/$DIS/$DAT" && \
+                          echo "Downloaded: $DIS/$DAT" || true
           done
       done )
 
@@ -152,9 +154,16 @@ overwrite_current() {
 		/slackware64/ /
 
     # Complete the base
-    upgradepkg --terse --reinstall --install-new /tmp/*.t?z
+    ( cd /tmp
+      for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
+          until upgradepkg --terse --reinstall \
+                      --install-new $PKG && rm -rf $PKG
+          do
+              echo "Retry installing in 3s: $PKG"
+              sleep 3
+          done
+      done )
 }
-
 
 restore_root_pass() {
     # Check if no root password, set '0v3rk1ll'
