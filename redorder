@@ -37,40 +37,26 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-extract_bootstrap_and_prepare() {
+extract_and_prepare() {
     BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
     DL_DIR="a ap d l n k t tcl x y"
 
-	rm -rf /slackware64
-	mkdir -p /slackware64
+	rm -rf /linux64
+	mkdir -p /linux64
 	# Extract bootstrap from Docker
 	docker pull aclemons/slackware:current
 	docker create --name slak_tmp aclemons/slackware:current
-	docker export slak_tmp -o /bootstrap.tar
+	docker export slak_tmp -o /base.tar
 	docker rm -f slak_tmp
 	docker rmi aclemons/slackware:current
-	tar -xpf /bootstrap.tar -C /slackware64
-	rm -f /bootstrap.tar
+	tar -xpf /base.tar -C /linux64
+	rm -f /base.tar
 
 	if [ -f /etc/resolv.conf ]; then
-		cp -L /etc/resolv.conf /slackware64/etc/resolv.conf
+		cp -L /etc/resolv.conf /linux64/etc/resolv.conf
 	else
-		echo "nameserver 1.1.1.1" > /slackware64/etc/resolv.conf
+		echo "nameserver 1.1.1.1" > /linux64/etc/resolv.conf
 	fi
-
-	# Mounts inspired from somewhere
-	mount -t proc proc /slackware64/proc -o nosuid,noexec,nodev 2>/dev/null
-	mount -t sysfs sys /slackware64/sys -o nosuid,noexec,nodev,ro 2>/dev/null
-	mount -t devtmpfs udev /slackware64/dev -o mode=0755,nosuid 2>/dev/null
-	mkdir -p /slackware64/dev/pts /slackware64/dev/shm /slackware64/run /slackware64/tmp
-	mount -t devpts devpts /slackware64/dev/pts -o mode=0620,gid=5,nosuid,noexec 2>/dev/null
-	mount -t tmpfs shm /slackware64/dev/shm -o mode=1777,nosuid,nodev 2>/dev/null
-	mount -t tmpfs run /slackware64/run -o nosuid,nodev,mode=0755 2>/dev/null
-	mount -t tmpfs tmp /slackware64/tmp -o mode=1777,strictatime,nodev,nosuid 2>/dev/null
-
-	rm -f /slackware64/etc/mtab
-	sed 's/\/slackware64\//\//' /etc/mtab \
-		> /slackware64/etc/mtab
 
     # Get packages for later
     ( cd /tmp
@@ -90,25 +76,21 @@ extract_bootstrap_and_prepare() {
     unset BASE_LINK DL_DIR
 }
 
-chroot_exec() {
-	chroot /slackware64 /bin/sh -c "$*"
-}
-
 # Doing shits in chroot
-configure_chroot() {
-    cp -f /etc/fstab /slackware64/etc/fstab
-	cp -f /etc/default/grub /slackware64/etc/default/grub
+configure_base() {
+    cp -f /etc/fstab /linux64/etc/fstab
+	cp -f /etc/default/grub /linux64/etc/default/grub
 
-	if [ -d /slackware64/etc/rc.d ]; then
+	if [ -d /linux64/etc/rc.d ]; then
 		for srv in rc.S rc.M rc.local rc.inet1 ; do
-			if [ -f /slackware64/etc/rc.d/$srv ]; then
-				chmod +x /slackware64/etc/rc.d/$srv
+			if [ -f /linux64/etc/rc.d/$srv ]; then
+				chmod +x /linux64/etc/rc.d/$srv
 			fi
 		done
 	fi
 
-	if [ -f /slackware64/etc/rc.d/rc.sshd ]; then
-		chmod +x /slackware64/etc/rc.d/rc.sshd
+	if [ -f /linux64/etc/rc.d/rc.sshd ]; then
+		chmod +x /linux64/etc/rc.d/rc.sshd
 	fi
 
 	unset srv
@@ -116,27 +98,27 @@ configure_chroot() {
 
 save_root_pass() {
 	if [ -r /etc/shadow ]; then
-		grep '^root:' /etc/shadow > /slackware64/root.passwd
-		chmod 0600 /slackware64/root.passwd
+		grep '^root:' /etc/shadow > /linux64/root.passwd
+		chmod 0600 /linux64/root.passwd
 	fi
 }
 
 backup_old_files() {
-	cp -fL /etc/hostname /etc/localtime /slackware64/etc/ 2>/dev/null
+	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
 
 	if [ -d /etc/ssh ]; then
-		mkdir -p /slackware64/ssh
-		cp -Lp /etc/ssh/ssh_host* /slackware64/ssh 2>/dev/null
+		mkdir -p /linux64/ssh
+		cp -Lp /etc/ssh/ssh_host* /linux64/ssh 2>/dev/null
 	fi
 
 	if [ -d /root/.ssh ]; then
-		cp -Lpr /root/.ssh /slackware64/key 2>/dev/null
+		cp -Lpr /root/.ssh /linux64/key 2>/dev/null
 	fi
 }
 
 un_mount() {
 	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|slackware64|proc|var\/lib\/docker|var\/lib\/containerd)/ {print $2}' \
+		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc|var\/lib\/docker|var\/lib\/containerd)/ {print $2}' \
 		/proc/mounts | sort -r)
 	do
 		umount -l "$mn" 2>/dev/null || true
@@ -145,19 +127,23 @@ un_mount() {
 }
 
 overwrite_current() {
-	un_mount
+	rm -rf /boot/efi/* 2>/dev/null || true
+    rm -f /boot/* 2>/dev/null || true
+    un_mount
 
-    # Smash
+    # Galactic smash
 	rsync -aHAX --numeric-ids --delete-after \
 		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
-		--exclude=/slackware64/** --exclude=/efi/** --exclude=/boot/** \
-		/slackware64/ /
+		--exclude=/linux64/** --exclude=/efi/** --exclude=/boot/** \
+		/linux64/ /
+
+
 
     # Complete the base
     ( cd /tmp
       for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
           until upgradepkg --terse --reinstall \
-                      --install-new $PKG && rm -rf $PKG
+                  --install-new $PKG 2>/dev/null && rm -rf $PKG
           do
               echo "Retry installing in 3s: $PKG"
               sleep 3
@@ -167,73 +153,65 @@ overwrite_current() {
 
 restore_root_pass() {
     # Check if no root password, set '0v3rk1ll'
-	if egrep -q '^root:[^$]' "/slackware64/root.passwd"; then
+	if egrep -q '^root:[^$]' "/linux64/root.passwd"; then
 		echo "root:0v3rk1ll" | chpasswd
 	else
 		sed -i '/^root:/d' /etc/shadow
-		cat "/slackware64/root.passwd" >> /etc/shadow
+		cat "/linux64/root.passwd" >> /etc/shadow
 	fi
 }
 
 cleanup() {
-	awk "/\/slackware64/ {print \$2}" /proc/mounts | sort -r | xargs -r umount -nl 2>/dev/null
-	rm -rf /slackware64
+	awk "/\/linux64/ {print \$2}" /proc/mounts | sort -r | xargs -r umount -nl 2>/dev/null
+	rm -rf /linux64
 }
 
-configure_network() {
-    ## TODO: Tring to recall libs in not gonna cut it.
+# configure_network() {
+#     ## TODO: Trying to recall libs in not gonna cut it.
 
-	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
-	# ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
-	# gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
-	conffile=/etc/rc.d/rc.inet1.conf
+# 	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
+# 	# ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
+# 	# gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
+# 	conffile=/etc/rc.d/rc.inet1.conf
 
-	if [ -n "$ipaddr" ]; then
-		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
-		# if [ -n "$cidr" ]; then
-		# 	netmask=$(awk -v p="$cidr" 'BEGIN{
-		# 		if (p=="") { print ""; exit }
-		# 		mask=0xffffffff; mask = mask ^ ((1 << (32-p)) - 1)
-		# 		printf "%d.%d.%d.%d", rshift(mask,24)&255, rshift(mask,16)&255, rshift(mask,8)&255, mask&255
-		# 	}
-		# 	function rshift(x,n){ for(i=0;i<n;i++) x=int(x/2); return x }')
-		# else
-		# 	netmask=""
-		# fi
-		# cat > "$conffile" <<-EOF
-		# 	# Auto-generated minimal rc.inet1.conf
-		# 	IPADDR[${dev}]="${ipaddr}"
-		# 	NETMASK[${dev}]="${netmask}"
-		# 	USE_DHCP="yes"
-		# EOF
-	# else
-		cat > "$conffile" <<-EOF
-			# Auto-generated minimal rc.inet1.conf
-			IPADDR[${dev}]="dhcp"
-			USE_DHCP="yes"
-		EOF
-	fi
+# 	if [ -n "$ipaddr" ]; then
+# 		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
+# 		# if [ -n "$cidr" ]; then
+# 		# 	netmask=$(awk -v p="$cidr" 'BEGIN{
+# 		# 		if (p=="") { print ""; exit }
+# 		# 		mask=0xffffffff; mask = mask ^ ((1 << (32-p)) - 1)
+# 		# 		printf "%d.%d.%d.%d", rshift(mask,24)&255, rshift(mask,16)&255, rshift(mask,8)&255, mask&255
+# 		# 	}
+# 		# 	function rshift(x,n){ for(i=0;i<n;i++) x=int(x/2); return x }')
+# 		# else
+# 		# 	netmask=""
+# 		# fi
+# 		# cat > "$conffile" <<-EOF
+# 		# 	# Auto-generated minimal rc.inet1.conf
+# 		# 	IPADDR[${dev}]="${ipaddr}"
+# 		# 	NETMASK[${dev}]="${netmask}"
+# 		# 	USE_DHCP="yes"
+# 		# EOF
+# 	# else
+# 		cat > "$conffile" <<-EOF
+# 			# Auto-generated minimal rc.inet1.conf
+# 			IPADDR[${dev}]="dhcp"
+# 			USE_DHCP="yes"
+# 		EOF
+# 	fi
 
-	chmod +x /etc/rc.d/rc.inet1 2>/dev/null
+# 	chmod +x /etc/rc.d/rc.inet1 2>/dev/null
 
-	if [ -f /etc/rc.d/rc.sshd ]; then
-		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
-	fi
+# 	if [ -f /etc/rc.d/rc.sshd ]; then
+# 		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
+# 	fi
 
-	unset dev ipaddr gateway conffile netmask
-}
+# 	unset dev ipaddr gateway conffile netmask
+# }
 
 configure_bootloader() {
 	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
 	needs_lvm2=0
-
-	if findmnt /efi >/dev/null 2>&1; then
-		umount -l /efi
-		rm -rf /efi
-		sed 's/\/efi/\/boot\/efi/' /etc/fstab \
-			> /etc/fstab
-		mkdir -p /boot/efi
-	fi
 
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
@@ -244,7 +222,14 @@ configure_bootloader() {
 	fi
 
 	mount -a || true
-	rm -rf /boot/efi/*
+
+	if findmnt /efi >/dev/null 2>&1; then
+		umount -l /efi
+		rm -rf /efi
+		sed 's/\/efi/\/boot\/efi/' /etc/fstab \
+			> /etc/fstab
+		mkdir -p /boot/efi
+	fi
 
 	$(/usr/share/mkinitrd/mkinitrd_command_generator.sh -k $(ls /lib/modules) | grep 'mkinitrd -c')
 	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
@@ -289,13 +274,12 @@ if [ "$#" -ne 0 ]; then
 fi
 
 cd /
-extract_bootstrap_and_prepare
-configure_chroot
+extract_and_prepare
+configure_base
 save_root_pass
 backup_old_files
 overwrite_current
 restore_root_pass
 cleanup
-configure_network
 configure_bootloader
 finalize
