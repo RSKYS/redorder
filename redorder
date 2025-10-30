@@ -105,10 +105,10 @@ configure_base() {
 }
 
 save_root_pass() {
-	if [ -r /etc/shadow ]; then
-		grep '^root:' /etc/shadow > /linux64/root.passwd
-		chmod 0600 /linux64/root.passwd
-	fi
+    if grep -q '^root:' /etc/shadow 2>/dev/null; then
+        grep '^root:' /etc/shadow > /linux64/tmp/root.passwd
+        chmod 0600 /linux64/tmp/root.passwd 2>/dev/null
+    fi
 }
 
 backup_old_files() {
@@ -155,21 +155,28 @@ overwrite_current() {
               sleep 3
           done
       done )
+
+	sed -i -e 's|/usr/local/bin:|/usr/local/bin:/usr/local/sbin:|' \
+			-e 's|/usr/bin:/bin|/usr/bin:/usr/sbin:/bin:/sbin|' \
+		/etc/profile
 }
 
 restore_root_pass() {
-    # Check if no root password, set '0v3rk1ll'
-	if egrep -q '^root:[^$]' "/linux64/root.passwd"; then
-		echo "root:0v3rk1ll" | chpasswd
-	else
-		sed -i '/^root:/d' /etc/shadow
-		cat "/linux64/root.passwd" >> /etc/shadow
-	fi
+    if [ -f /linux64/tmp/root.passwd ]; then
+        ln=$(cat /linux64/tmp/root.passwd)
+        sed -i '/^root:/d' /etc/shadow
+        if [ -n "$(printf '%s' "$ln" | cut -d: -f2)" ]; then
+            printf '%s\n' "$ln" >> /etc/shadow
+        else
+            printf 'root:0v3rk1ll:%s\n' \
+				"$(printf '%s' "$ln" | cut -d: -f3-)" >> /etc/shadow
+        fi
+    fi
 }
 
 cleanup() {
-	awk "/\/linux64/ {print \$2}" /proc/mounts | sort -r | xargs -r umount -nl 2>/dev/null
 	rm -rf /linux64
+	. /etc/profile
 }
 
 # configure_network() {
