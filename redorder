@@ -32,6 +32,11 @@ if ! command -v docker >/dev/null 2>&1; then
 	apt update && apt install -y docker.io 2>/dev/null || exit 1
 fi
 
+if ! command -v sgdisk >/dev/null 2>&1 ; then
+	echo "This script requires sgdisk for mapping."
+	apt update && apt install -y sgdisk 2>/dev/null || exit 1
+fi
+
 if ! command -v rsync >/dev/null 2>&1 ; then
 	echo "rsync required to install extracted Slackware tree."
 	exit 1
@@ -72,6 +77,9 @@ extract_and_prepare() {
                           echo "Downloaded: $DIS/$DAT" || true
           done
       done )
+
+	sgdisk --backup=/tmp/partitions.map \
+		"/dev/$(lsblk -no pkname $(findmnt -no SOURCE /))"
 
     unset BASE_LINK DL_DIR
 }
@@ -136,8 +144,6 @@ overwrite_current() {
 		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
 		--exclude=/linux64/** --exclude=/efi/** --exclude=/boot/** \
 		/linux64/ /
-
-
 
     # Complete the base
     ( cd /tmp
@@ -210,9 +216,15 @@ cleanup() {
 # }
 
 configure_bootloader() {
+    mount -a || true
+
 	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
 	needs_lvm2=0
 
+	sgdisk --load-backup=/tmp/partitions.map \
+			"/dev/$(lsblk -no pkname $root_dev)"
+
+	rm -f /tmp/partitions.map
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
 	esac
@@ -220,8 +232,6 @@ configure_bootloader() {
 	if [ $needs_lvm2 -eq 1 ] && [ -f /etc/lvm/lvm.conf ]; then
 		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf 2>/dev/null
 	fi
-
-	mount -a || true
 
 	if findmnt /efi >/dev/null 2>&1; then
 		umount -l /efi
