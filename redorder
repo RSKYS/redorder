@@ -104,13 +104,6 @@ configure_base() {
 	unset srv
 }
 
-save_root_pass() {
-    if grep -q '^root:' /etc/shadow 2>/dev/null; then
-        grep '^root:' /etc/shadow > /linux64/tmp/root.passwd
-        chmod 0600 /linux64/tmp/root.passwd 2>/dev/null
-    fi
-}
-
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
 
@@ -161,66 +154,55 @@ overwrite_current() {
 		/etc/profile
 }
 
-restore_root_pass() {
-    if [ -f /linux64/tmp/root.passwd ]; then
-        ln=$(cat /linux64/tmp/root.passwd)
-        sed -i '/^root:/d' /etc/shadow
-        if [ -n "$(printf '%s' "$ln" | cut -d: -f2)" ]; then
-            printf '%s\n' "$ln" >> /etc/shadow
-        else
-            printf 'root:0v3rk1ll:%s\n' \
-				"$(printf '%s' "$ln" | cut -d: -f3-)" >> /etc/shadow
-        fi
-    fi
-}
-
 cleanup() {
 	rm -rf /linux64
-	. /etc/profile
+	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 }
 
-# configure_network() {
-#     ## TODO: Trying to recall libs in not gonna cut it.
+configure_network() {
+	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
+	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
+	gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
+	conffile=/etc/rc.d/rc.inet1.conf
 
-# 	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
-# 	# ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
-# 	# gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
-# 	conffile=/etc/rc.d/rc.inet1.conf
+	if [ -n "$ipaddr" ]; then
+		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
+		if [ -n "$cidr" ]; then
+			netmask=$(awk -v p="$cidr" 'BEGIN{
+				if (p<0 || p>32) { print ""; exit }
+				for (i=0;i<4;i++) {
+					if (p>=8) { oct=255; p-=8 }
+					else if (p>0) { oct=256-(2^(8-p)); p=0 }
+					else { oct=0 }
+					mask = mask (i? "." : "") oct
+				}
+				print mask
+			}')
+		else
+			netmask=""
+		fi
+		cat > "$conffile" <<-EOF
+			# Auto-generated minimal rc.inet1.conf
+			IPADDR[${dev}]="${ipaddr}"
+			NETMASK[${dev}]="${netmask}"
+			USE_DHCP="yes"
+		EOF
+	else
+		cat > "$conffile" <<-EOF
+			# Auto-generated minimal rc.inet1.conf
+			IPADDR[${dev}]="dhcp"
+			USE_DHCP="yes"
+		EOF
+	fi
 
-# 	if [ -n "$ipaddr" ]; then
-# 		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
-# 		# if [ -n "$cidr" ]; then
-# 		# 	netmask=$(awk -v p="$cidr" 'BEGIN{
-# 		# 		if (p=="") { print ""; exit }
-# 		# 		mask=0xffffffff; mask = mask ^ ((1 << (32-p)) - 1)
-# 		# 		printf "%d.%d.%d.%d", rshift(mask,24)&255, rshift(mask,16)&255, rshift(mask,8)&255, mask&255
-# 		# 	}
-# 		# 	function rshift(x,n){ for(i=0;i<n;i++) x=int(x/2); return x }')
-# 		# else
-# 		# 	netmask=""
-# 		# fi
-# 		# cat > "$conffile" <<-EOF
-# 		# 	# Auto-generated minimal rc.inet1.conf
-# 		# 	IPADDR[${dev}]="${ipaddr}"
-# 		# 	NETMASK[${dev}]="${netmask}"
-# 		# 	USE_DHCP="yes"
-# 		# EOF
-# 	# else
-# 		cat > "$conffile" <<-EOF
-# 			# Auto-generated minimal rc.inet1.conf
-# 			IPADDR[${dev}]="dhcp"
-# 			USE_DHCP="yes"
-# 		EOF
-# 	fi
+	chmod +x /etc/rc.d/rc.inet1 2>/dev/null
 
-# 	chmod +x /etc/rc.d/rc.inet1 2>/dev/null
+	if [ -f /etc/rc.d/rc.sshd ]; then
+		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
+	fi
 
-# 	if [ -f /etc/rc.d/rc.sshd ]; then
-# 		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
-# 	fi
-
-# 	unset dev ipaddr gateway conffile netmask
-# }
+	unset dev ipaddr gateway conffile netmask
+}
 
 configure_bootloader() {
     mount -a || true
@@ -269,10 +251,12 @@ finalize() {
 			grep -q '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null || printf "PermitRootLogin yes\n" >> /etc/ssh/sshd_config
 		fi
 	fi
+
 	if [ -d /etc/rc.d ]; then
 		chmod +x /etc/rc.d/rc.S /etc/rc.d/rc.M /etc/rc.d/rc.local 2>/dev/null
 	fi
 
+	echo 'root:0v3rk1ll' | chpasswd
 	cat <<-EOF
 	Hey there,
 	This machine has been squashed with new distro.
@@ -280,8 +264,8 @@ finalize() {
 	Recommended actions (on the VM host console):
 	  # sync ; reboot -f
 
-	After reboot you should be able to login as root with your original root
-	password (or '0v3rk1ll' if no root password was found and a fallback was used).
+	After reboot you should be able to login as root with '0v3rk1ll'
+	Change it later how you see it fit ;-)
 	EOF
 }
 
@@ -293,10 +277,9 @@ fi
 cd /
 extract_and_prepare
 configure_base
-save_root_pass
 backup_old_files
 overwrite_current
-restore_root_pass
 cleanup
+configure_network
 configure_bootloader
 finalize
