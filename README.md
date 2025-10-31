@@ -14,14 +14,16 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 ```
 
 ## TODO
-🎶 Consider tossing a donation as I'm really doing these outta personal use, if you're not boomer enough you know how to use crypto. Written with [lot of autism].
+🎶 Consider tossing a donation as I'm really doing these outta personal use, if you're not boomer enough you know how to use [crypto]. Written with [lot of autism].
 
+- [ ] Alpine
 - [X] Arch Linux
-- [ ] Artix
 - [ ] Debian
-- [ ] Playbook
-- [X] Slackware
 - [X] openSUSE
+- [X] Slackware
+- [ ] Void
 - [ ] NixOS (Maybe)
+- [ ] Playbook (Maybe)
 
 [lot of autism]:https://youtu.be/giOgg0TRsxc?si=cS_U2x1M4cp0hsHM
+[crypto]:https://github.com/RSKYS/RSKYS/blob/master/README.md
