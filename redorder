@@ -269,9 +269,46 @@ finalize() {
 	EOF
 }
 
-if [ "$#" -ne 0 ]; then
-    printf "Parameters are not defined in this script yet.\n"
-    exit 1
+
+# Defining argument options
+choose_option() {
+  case "$1" in
+    1|--slackware) 
+		return 0
+		;;
+    2|--artix) 
+		# Later
+		exit 0
+		;;
+    3|--arch)
+		wget -O- \
+			https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | \
+		sh && exit 0
+		;;
+	4|--opensuse)
+		wget -O- \
+			https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | \
+		sh && exit 0
+		;;
+  esac
+}
+
+# Use argument if provided, otherwise prompt
+if [ -n "$1" ]; then
+	choose_option "$1"
+else
+	cat <<-EOF
+	Supported list:
+	1) Slackware -current (--slackware)
+	2) Artix -rolling (--artix)
+	3) Arch Linux -rolling (--arch)
+	4) openSUSE Tumbleweed (--opensuse)
+
+	Choose an option from above:
+	EOF
+
+	read -r choice
+	choose_option "$choice"
 fi
 
 cd /

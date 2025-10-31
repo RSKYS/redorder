@@ -16,9 +16,13 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 ## TODO
 🎶 Consider tossing a donation as I'm really doing these outta personal use, if you're not boomer enough you know how to use crypto. Written with [lot of autism].
 
-- [ ] NixOS
+- [X] Arch Linux
+- [ ] Artix
+- [ ] Debian
 - [ ] Playbook
-- [ ] Debian (Maybe)
+- [X] Slackware
+- [X] openSUSE
+- [ ] NixOS (Maybe)
 - [ ] SUSE/RHEL/etc (Maybe)
 
 [lot of autism]:https://youtu.be/giOgg0TRsxc?si=cS_U2x1M4cp0hsHM
