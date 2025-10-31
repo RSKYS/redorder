@@ -23,6 +23,5 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 - [X] Slackware
 - [X] openSUSE
 - [ ] NixOS (Maybe)
-- [ ] SUSE/RHEL/etc (Maybe)
 
 [lot of autism]:https://youtu.be/giOgg0TRsxc?si=cS_U2x1M4cp0hsHM

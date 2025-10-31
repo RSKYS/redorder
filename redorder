@@ -33,8 +33,8 @@ if ! command -v docker >/dev/null 2>&1; then
 fi
 
 if ! command -v sgdisk >/dev/null 2>&1 ; then
-	echo "This script requires sgdisk for mapping."
-	apt update && apt install -y sgdisk 2>/dev/null || exit 1
+	echo "This script requires gdisk for mapping."
+	apt update && apt install -y gdisk 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -269,47 +269,54 @@ finalize() {
 	EOF
 }
 
-
-# Defining argument options
 choose_option() {
-  case "$1" in
-    1|--slackware) 
-		return 0
-		;;
-    2|--artix) 
-		# Later
-		exit 0
-		;;
-    3|--arch)
-		wget -O- \
-			https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | \
-		sh && exit 0
-		;;
-	4|--opensuse)
-		wget -O- \
-			https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | \
-		sh && exit 0
-		;;
-  esac
+    case "$1" in
+        1|--slackware)
+            echo "Installing Slackware -current..."
+            return 0
+            ;;
+        2|--artix)
+            echo "Artix installation not yet implemented."
+            return 1
+            ;;
+        3|--arch)
+            echo "Installing Arch Linux..."
+            wget -O- https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | sh
+            exit 0
+            ;;
+        4|--opensuse)
+            echo "Installing openSUSE Tumbleweed..."
+            wget -O- https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | sh
+            exit 0
+            ;;
+        *)
+            return 1
+            ;;
+    esac
 }
 
-# Use argument if provided, otherwise prompt
-if [ -n "$1" ]; then
-	choose_option "$1"
-else
-	cat <<-EOF
-	Supported list:
-	1) Slackware -current (--slackware)
-	2) Artix -rolling (--artix)
-	3) Arch Linux -rolling (--arch)
-	4) openSUSE Tumbleweed (--opensuse)
+show_menu() {
+    cat <<-EOF
+	Supported distributions:
+	1) Slackware -current    (--slackware)
+	2) Artix -rolling        (--artix)
+	3) Arch Linux -rolling   (--arch)
+	4) openSUSE Tumbleweed   (--opensuse)
 
-	Choose an option from above:
+	Usage: $0 [option_number|--option_name]
 	EOF
+}
 
-	read -r choice
-	choose_option "$choice"
+if [ -n "$1" ]; then
+    if ! choose_option "$1"; then
+        echo "Invalid option: $1"
+        show_menu
+        exit 1
+    fi
+else
+    choose_option 1
 fi
+
 
 cd /
 extract_and_prepare
