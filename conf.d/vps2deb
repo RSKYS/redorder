@@ -1,21 +1,56 @@
 #!/bin/sh
 
+# Copyright 2025, Pouria Rezaei <Pouria.rz@outlook.com>
+
+# Part of RedOrder, handling Debian
+# (Most-likely due me hating Ubuntu)
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License at <http://www.gnu.org/licenses/> for
+# more details.
+
 set -e
 
 mirror="https://mirror.rackspace.com"
-version="trixie"
+version="bookworm"
 
 extract_and_prepare() {
-	rm -rf /Debian
-	mkdir -p /Debian
+	rm -rf /tmp/build /Debian
+	mkdir -p /tmp/build /Debian
 	# Extract base from Docker
-	docker pull "debian:$version"
-	docker create --name deb_tmp "debian:$version"
-	docker export deb_tmp -o /base.tar
+	cat > /tmp/build/Dockerfile <<-INIT
+	FROM debian:$version AS builder
+	USER root
+
+	RUN apt update && apt -y install debootstrap
+	RUN mkdir -p /mnt && \
+		debootstrap --arch amd64 \
+		--include=sudo,bash,dbus,locales,vim,wget,ca-certificates,curl,systemd-timesyncd,zstd,parted,cron,dosfstools,git,openssh-server,build-essential,python3-venv,python3-pip,grub-efi-amd64,open-vm-tools \
+		$version /mnt $mirror/debian
+
+	FROM scratch
+	COPY --from=builder /mnt /
+
+	CMD ["/bin/bash"]
+	INIT
+
+	( cd /tmp/build
+	  DOCKER_BUILDKIT=1 \
+		docker build -t base_sys . )
+
+	docker create --name deb_tmp base_sys
+	docker export deb_tmp -o /tmp/base.tar
 	docker rm -f deb_tmp
-	docker rmi "debian:$version"
-	tar -xpf /base.tar -C /Debian
-	rm -f /base.tar
+	docker rmi base_sys
+	tar -xpf /tmp/base.tar -C /Debian
+	rm -f /tmp/base.tar
 
 	if [ -f /etc/resolv.conf ]; then
 		cp -L /etc/resolv.conf /Debian/etc/resolv.conf
@@ -81,6 +116,8 @@ overwrite_system() {
 
 	LCL
 
+	update-ca-certificates
+
 	DEBIAN_FRONTEND=noninteractive \
 		apt update
 
@@ -90,7 +127,7 @@ overwrite_system() {
 		bcache-tools bolt btrfs-progs build-essential byobu ca-certificates \
 		command-not-found console-setup cron cryptsetup cryptsetup-initramfs curl \
 		dbus dbus-user-session dconf-gsettings-backend distro-info dosfstools \
-		e2fsprogs-l10n eatmydata ed efibootmgr eject ethtool exfatprogs fastfetch \
+		e2fsprogs-l10n eatmydata ed efibootmgr eject ethtool exfatprogs neofetch \
 		file fonts-dejavu-core ftp fwupd gdisk gir1.2-packagekitglib-1.0 git \
 		gnome-keyring gnome-keyring-pkcs11 gnupg-l10n gpg-wks-client gpg-wks-server \
 		grub-efi-amd64 gtk-update-icon-cache hdparm hicolor-icon-theme htop \
@@ -139,47 +176,45 @@ overwrite_system() {
 }
 
 configure_network() {
-	local gateway dev ip
+	local dev ipaddr gateway conffile
 
-	# pick first non-loopback interface
-	dev=$(ls /sys/class/net | grep -v lo | head -n1)
-	if [ -n "$(ip -4 route show default | awk '{ print $3 }')" ]; then
-		gateway=$(ip -4 route show default | awk '{ print $3 }')
-		set -- $(ip addr show dev "$dev" | awk '($1 == "inet") { print $2 }')
-	else
-		gateway=$(ip -6 route show default | awk '{ print $3 }')
-		set -- $(ip addr show dev "$dev" | awk '($1 == "inet6" && $2 !~ /^fe80/) { print $2 }')
-	fi
-	ip=$@
+	dev=$(ls /sys/class/net | grep \
+		-Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
+	ipaddr=$(ip -4 addr show dev "$dev" 2>/dev/null | \
+		awk '($1=="inet"){print $2; exit}')
+	gateway=$(ip -4 route show default 2>/dev/null | \
+		awk '{print $3; exit}')
+	conffile="/etc/systemd/network/10-default.network"
 
-	if [ "$network" = "systemd-networkd" ]; then
-		cat > /etc/systemd/network/default.network <<-EOF
+	cat > /etc/network/interfaces <<-EOF
+	auto lo
+	iface lo inet loopback
+
+	auto $dev
+	iface $dev inet dhcp
+	EOF
+
+	if [ -n "$ipaddr" ]; then
+		cat > "$conffile" <<-EOF
 		[Match]
 		Name=$dev
 
 		[Network]
 		Gateway=$gateway
+		Address=$ipaddr
 		EOF
-		for ip in $ip; do
-			printf 'Address=%s\n' "$ip"
-		done >> /etc/systemd/network/default.network
-		systemctl enable systemd-networkd
-	elif [ "$network" = "netctl" ]; then
-		cat > /etc/netctl/default <<-EOF
-		Interface=$dev
-		Connection=ethernet
-		IP=static
-		Address=($ip)
+	else
+		cat > "$conffile" <<-EOF
+		[Match]
+		Name=$dev
+
+		[Network]
+		DHCP=yes
 		EOF
-		if [ "$gateway" = "0.0.0.0" ]; then
-			echo 'Routes=(0.0.0.0/0)' >> /etc/netctl/default
-		else
-			printf 'Gateway=%s\n' "$gateway" >> /etc/netctl/default
-		fi
-		netctl enable default
 	fi
 
-	unset dev ip gateway network
+	systemctl enable ssh sshd systemd-networkd \
+		2>/dev/null || true
 }
 
 configure_bootloader() {
@@ -228,7 +263,7 @@ finalize() {
 		fi
 	fi
 
-	echo -e "\nfastfetch\n" >> /etc/profile
+	echo "\nneofetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
 
 	cat <<-EOF

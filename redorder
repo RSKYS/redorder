@@ -30,12 +30,15 @@ fi
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "This script requires docker."
-	apt update && apt install -y docker.io 2>/dev/null || exit 1
+	apt update && \
+			apt install -y docker.io docker-buildx \
+		2>/dev/null || exit 1
 fi
 
 if ! command -v sgdisk >/dev/null 2>&1 ; then
 	echo "This script requires gdisk for mapping."
-	apt update && apt install -y gdisk 2>/dev/null || exit 1
+	apt update && \
+		apt install -y gdisk 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -152,7 +155,8 @@ cleanup() {
 }
 
 configure_network() {
-	dev=$(ls /sys/class/net 2>/dev/null | grep -v lo | head -n1)
+	dev=$(ls /sys/class/net | grep \
+		-Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
 	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
 	gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
 	conffile=/etc/rc.d/rc.inet1.conf
@@ -174,14 +178,12 @@ configure_network() {
 			netmask=""
 		fi
 		cat > "$conffile" <<-EOF
-			# Auto-generated minimal rc.inet1.conf
 			IPADDR[${dev}]="${ipaddr}"
 			NETMASK[${dev}]="${netmask}"
 			USE_DHCP="yes"
 		EOF
 	else
 		cat > "$conffile" <<-EOF
-			# Auto-generated minimal rc.inet1.conf
 			IPADDR[${dev}]="dhcp"
 			USE_DHCP="yes"
 		EOF
