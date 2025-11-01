@@ -31,8 +31,10 @@ fi
 if ! command -v docker >/dev/null 2>&1; then
 	echo "This script requires docker."
 	apt update && \
-			apt install -y docker.io docker-buildx \
-		2>/dev/null || exit 1
+		apt install -y docker.io \
+			2>/dev/null || exit 1
+	apt install -y docker-buildx \
+		2>/dev/null || true
 fi
 
 if ! command -v sgdisk >/dev/null 2>&1 ; then
@@ -114,7 +116,7 @@ backup_old_files() {
 
 un_mount() {
 	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc|var\/lib\/docker|var\/lib\/containerd)/ {print $2}' \
+		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc)/ {print $2}' \
 		/proc/mounts | sort -r)
 	do
 		umount -l "$mn" 2>/dev/null || true
