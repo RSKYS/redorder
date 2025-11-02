@@ -19,8 +19,8 @@
 set -e
 
 if [ "$(id -u)" -ne 0 ]; then
-    echo "This script must be run as root."
-    exit 1
+	echo "This script must be run as root."
+	exit 1
 fi
 
 if ! command -v wget >/dev/null 2>&1; then
@@ -30,17 +30,13 @@ fi
 
 if ! command -v docker >/dev/null 2>&1; then
 	echo "This script requires docker."
-	apt update && \
-		apt install -y docker.io \
-			2>/dev/null || exit 1
-	apt install -y docker-buildx \
-		2>/dev/null || true
+	apt update && apt install -y docker.io 2>/dev/null || exit 1
+	apt install -y docker-buildx 2>/dev/null || true
 fi
 
 if ! command -v sgdisk >/dev/null 2>&1 ; then
 	echo "This script requires gdisk for mapping."
-	apt update && \
-		apt install -y gdisk 2>/dev/null || exit 1
+	apt update && apt install -y gdisk 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -48,13 +44,15 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 	exit 1
 fi
 
+ROOTDEV=$(findmnt -n -o SOURCE / 2>/dev/null)
+DISK=$(lsblk -no pkname "$ROOTDEV" 2>/dev/null)
+
 extract_and_prepare() {
-    BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
-    DL_DIR="a ap d l n k t tcl x y"
+	BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
+	DL_DIR="a ap d l n k t tcl x y"
 
 	rm -rf /linux64
 	mkdir -p /linux64
-	# Extract base from Docker
 	docker pull aclemons/slackware:current
 	docker create --name slak_tmp aclemons/slackware:current
 	docker export slak_tmp -o /base.tar
@@ -70,29 +68,23 @@ extract_and_prepare() {
 	fi
 
     # Get packages for later
-    ( cd /tmp
-      rm -rf .* * 2>/dev/null || true
+	( cd /tmp
+	  for DIS in $DL_DIR; do
+		  TMP_GET=$(wget --timeout=10 --tries=2 -O- "$BASE_LINK/$DIS" | grep '.asc' | \
+					  sed 's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | \
+					  sed '/\.t.z$/!d' | sort -fu)
+		  for DAT in $TMP_GET; do
+			  wget --timeout=10 --tries=3 --content-disposition \
+					  -q -c "$BASE_LINK/$DIS/$DAT" && \
+						  echo "Downloaded: $DIS/$DAT" || true
+		  done
+	  done )
 
-      for DIS in $DL_DIR; do
-          TMP_GET=$(wget --timeout=10 --tries=2 -O- "$BASE_LINK/$DIS" | grep '.asc' | \
-                      sed 's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | \
-                      sed '/\.t.z$/!d' | sort -fu)
-          for DAT in $TMP_GET; do
-              wget --timeout=10 --tries=3 --content-disposition \
-                      -q -c "$BASE_LINK/$DIS/$DAT" && \
-                          echo "Downloaded: $DIS/$DAT" || true
-          done
-      done )
-
-	sgdisk --backup=/tmp/partitions.map \
-		"/dev/$(lsblk -no pkname $(findmnt -no SOURCE /))"
-
-    unset BASE_LINK DL_DIR
+	unset BASE_LINK DL_DIR TMP_GET DAT DIS
 }
 
-# Doing shits in chroot
 configure_base() {
-    cp -f /etc/fstab /linux64/etc/fstab
+	cp -f /etc/fstab /linux64/etc/fstab
 	cp -f /etc/default/grub /linux64/etc/default/grub
 
 	if [ -d /linux64/etc/rc.d ]; then
@@ -106,49 +98,43 @@ configure_base() {
 	if [ -f /linux64/etc/rc.d/rc.sshd ]; then
 		chmod +x /linux64/etc/rc.d/rc.sshd
 	fi
+}
 
-	unset srv
+un_mount() {
+	for mn in $(awk '$2 != "/" && $2 !~ /^\/(boot|efi|dev|sys|linux64|proc)/ {print $2}' \
+		/proc/mounts | sort -r)
+	do
+		umount -l "$mn" 2>/dev/null
+	done
 }
 
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
-}
-
-un_mount() {
-	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc)/ {print $2}' \
-		/proc/mounts | sort -r)
-	do
-		umount -l "$mn" 2>/dev/null || true
-	done
-	unset mn
+	rm -rf /boot/efi/* 2>/dev/null || true
+	rm -f /boot/* 2>/dev/null || true
+	un_mount
+	# Backup the partitions scheme
+	sgdisk --backup=/tmp/partitions.map "/dev/$DISK"
 }
 
 overwrite_current() {
-	rm -rf /boot/efi/* 2>/dev/null || true
-    rm -f /boot/* 2>/dev/null || true
-    un_mount
-
-    # Galactic smash
-	rsync -aHAX --numeric-ids --delete-after \
-		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
+	# Galactic smash
+	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
+		--exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
 		--exclude=/linux64/** --exclude=/efi/** --exclude=/boot/** \
 		/linux64/ /
 
-    # Complete the base
-    ( cd /tmp
-      for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
-          until upgradepkg --terse --reinstall \
-                  --install-new $PKG 2>/dev/null && rm -rf $PKG
-          do
-              echo "Retry installing in 3s: $PKG"
-              sleep 3
-          done
-      done )
-
+	( cd /tmp
+	for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
+		until upgradepkg --terse --reinstall --install-new $PKG \
+			2>/dev/null && rm -rf $PKG
+		do
+			echo "Retry installing in 3s: $PKG"
+			sleep 3
+		done
+	done )
 	sed -i -e 's|/usr/local/bin:|/usr/local/bin:/usr/local/sbin:|' \
-			-e 's|/usr/bin:/bin|/usr/bin:/usr/sbin:/bin:/sbin|' \
-		/etc/profile
+		-e 's|/usr/bin:/bin|/usr/bin:/usr/sbin:/bin:/sbin|' /etc/profile
 }
 
 cleanup() {
@@ -157,10 +143,8 @@ cleanup() {
 }
 
 configure_network() {
-	dev=$(ls /sys/class/net | grep \
-		-Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
+	dev=$(ls /sys/class/net | grep -Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
 	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
-	gateway=$(ip -4 route show default 2>/dev/null | awk '{print $3; exit}')
 	conffile=/etc/rc.d/rc.inet1.conf
 
 	if [ -n "$ipaddr" ]; then
@@ -179,15 +163,16 @@ configure_network() {
 		else
 			netmask=""
 		fi
+
 		cat > "$conffile" <<-EOF
-			IPADDR[${dev}]="${ipaddr}"
-			NETMASK[${dev}]="${netmask}"
-			USE_DHCP="yes"
+		IPADDR[${dev}]="${ipaddr}"
+		NETMASK[${dev}]="${netmask}"
+		USE_DHCP="yes"
 		EOF
 	else
 		cat > "$conffile" <<-EOF
-			IPADDR[${dev}]="dhcp"
-			USE_DHCP="yes"
+		IPADDR[${dev}]="dhcp"
+		USE_DHCP="yes"
 		EOF
 	fi
 
@@ -197,32 +182,34 @@ configure_network() {
 		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
 	fi
 
-	unset dev ipaddr gateway conffile netmask
+	unset ipaddr dev netmask conffile
 }
 
 configure_bootloader() {
-    mount -a || true
-
-	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
+	# Revert the partitions scheme
+	sgdisk --load-backup=/tmp/partitions.map "/dev/$DISK"
+	mount -a
 	needs_lvm2=0
 
-	sgdisk --load-backup=/tmp/partitions.map \
-			"/dev/$(lsblk -no pkname $root_dev)"
+	partprobe "$DISK" 2>/dev/null
+	udevadm settle 2>/dev/null
 
 	rm -f /tmp/partitions.map
-	case $root_dev in
+
+	case $DISK in
 	/dev/mapper/*) needs_lvm2=1 ;;
 	esac
 
 	if [ $needs_lvm2 -eq 1 ] && [ -f /etc/lvm/lvm.conf ]; then
-		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf 2>/dev/null
+		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf \
+			2>/dev/null
 	fi
 
 	if findmnt /efi >/dev/null 2>&1; then
-		umount -l /efi
+		umount -l /efi 2>/dev/null
 		rm -rf /efi
-		sed 's/\/efi/\/boot\/efi/' /etc/fstab \
-			> /etc/fstab
+		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab 2>/dev/null
+		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
 		mkdir -p /boot/efi
 	fi
 
@@ -233,8 +220,6 @@ configure_bootloader() {
 	if [ -f /etc/lvm/lvm.conf.bak ]; then
 		mv /etc/lvm/lvm.conf.bak /etc/lvm/lvm.conf 2>/dev/null
 	fi
-
-	unset root_dev needs_lvm2
 }
 
 finalize() {
@@ -256,9 +241,9 @@ finalize() {
 	cat <<-EOF
 	Hey there,
 	This machine has been squashed with new Slackware distro.
-	
+
 	Recommended actions (on the VM host console):
-	  # sync ; reboot -f
+	# sync ; reboot -f
 
 	After reboot you should be able to login as root with '0v3rk1ll'
 	Change it later how you see it fit ;-)
@@ -266,36 +251,30 @@ finalize() {
 }
 
 choose_option() {
-    case "$1" in
-        1|--slackware)
-            echo "Installing Slackware -current..."
-            return 0
-            ;;
-        2|--debian)
-            wget -q -O- \
-				https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/master/conf.d/vps2deb | sh
-            exit 0
-            ;;
-        3|--arch)
-            echo "Installing Arch Linux..."
-            wget -q -O- \
-				https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | sh
-            exit 0
-            ;;
-        4|--opensuse)
-            echo "Installing openSUSE Tumbleweed..."
-            wget -q -O- \
-				https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | sh
-            exit 0
-            ;;
-        *)
-            return 1
-            ;;
-    esac
+	case "$1" in
+		1|--slackware)
+			return 0
+			;;
+		2|--debian)
+			wget -q -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/master/conf.d/vps2deb | sh
+			exit 0
+			;;
+		3|--arch)
+			wget -q -O- https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | sh
+			exit 0
+			;;
+		4|--opensuse)
+			wget -q -O- https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | sh
+			exit 0
+			;;
+		*)
+			return 1
+			;;
+	esac
 }
 
 show_menu() {
-    cat <<-EOF
+	cat <<-EOF
 	Supported distributions:
 	1) Slackware -current    (--slackware)
 	2) Debian Bookworm       (--debian)
@@ -307,15 +286,14 @@ show_menu() {
 }
 
 if [ -n "$1" ]; then
-    if ! choose_option "$1"; then
-        echo "Invalid option: $1"
-        show_menu
-        exit 1
-    fi
+	if ! choose_option "$1"; then
+		echo "Invalid option: $1"
+		show_menu
+		exit 1
+	fi
 else
-    choose_option 1
+	choose_option 1
 fi
-
 
 cd /
 extract_and_prepare
