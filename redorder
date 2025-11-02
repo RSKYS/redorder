@@ -1,0 +1,319 @@
+#!/bin/sh
+
+# Copyright 2025, Pouria Rezaei <Pouria.rz@outlook.com>
+
+# The mighty RedOrder set, where it all begins
+# The script is x86_64 + EFI only
+
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 2 of the License, or
+# (at your option) any later version.
+
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License at <http://www.gnu.org/licenses/> for
+# more details.
+
+set -e
+
+if [ "$(id -u)" -ne 0 ]; then
+	echo "This script must be run as root."
+	exit 1
+fi
+
+if ! command -v wget >/dev/null 2>&1; then
+	echo "This script requires wget."
+	exit 1
+fi
+
+if ! command -v docker >/dev/null 2>&1; then
+	echo "This script requires docker."
+	apt update && apt install -y docker.io 2>/dev/null || exit 1
+	apt install -y docker-buildx 2>/dev/null || true
+fi
+
+if ! command -v sgdisk >/dev/null 2>&1 ; then
+	echo "This script requires gdisk for mapping."
+	apt update && apt install -y gdisk 2>/dev/null || exit 1
+fi
+
+if ! command -v rsync >/dev/null 2>&1 ; then
+	echo "rsync required to install extracted Slackware tree."
+	exit 1
+fi
+
+ROOTDEV=$(findmnt -n -o SOURCE / 2>/dev/null)
+DISK=$(lsblk -no pkname "$ROOTDEV" 2>/dev/null)
+
+extract_and_prepare() {
+	local BASE_LINK DL_DIR TMP_GET DAT DIS
+
+	BASE_LINK="https://slackware.uk/slackware/slackware64-current/slackware64"
+	DL_DIR="a ap d l n k t tcl x y"
+
+	rm -rf /linux64
+	mkdir -p /linux64
+	docker pull aclemons/slackware:current
+	docker create --name slak_tmp aclemons/slackware:current
+	docker export slak_tmp -o /base.tar
+	docker rm -f slak_tmp
+	docker rmi aclemons/slackware:current
+	tar -xpf /base.tar -C /linux64
+	rm -f /base.tar
+
+	if [ -f /etc/resolv.conf ]; then
+		cp -L /etc/resolv.conf /linux64/etc/resolv.conf
+	else
+		echo "nameserver 1.1.1.1" > /linux64/etc/resolv.conf
+	fi
+
+    # Get packages for later
+	( cd /tmp
+	  for DIS in $DL_DIR; do
+		  TMP_GET=$(wget --timeout=10 --tries=2 -O- "$BASE_LINK/$DIS" | grep '.asc' | \
+					  sed 's/.*href="\([^"]*\.asc\)".*/\1/p' | sed 's/.asc//g' | \
+					  sed '/\.t.z$/!d' | sort -fu)
+		  for DAT in $TMP_GET; do
+			  wget --timeout=10 --tries=3 --content-disposition \
+					  -q -c "$BASE_LINK/$DIS/$DAT" && \
+						  echo "Downloaded: $DIS/$DAT" || true
+		  done
+	  done )
+}
+
+configure_base() {
+	local srv
+
+	cp -f /etc/fstab /linux64/etc/fstab
+	cp -f /etc/default/grub /linux64/etc/default/grub
+
+	if [ -d /linux64/etc/rc.d ]; then
+		for srv in rc.S rc.M rc.local rc.inet1 ; do
+			if [ -f /linux64/etc/rc.d/$srv ]; then
+				chmod +x /linux64/etc/rc.d/$srv
+			fi
+		done
+	fi
+
+	if [ -f /linux64/etc/rc.d/rc.sshd ]; then
+		chmod +x /linux64/etc/rc.d/rc.sshd
+	fi
+}
+
+un_mount() {
+	local mn
+
+	for mn in $(awk '$2 != "/" &&
+		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc)/ {print $2}' \
+		/proc/mounts | sort -r); do
+		umount -l "$mn" 2>/dev/null || true
+	done
+}
+
+backup_old_files() {
+	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
+	rm -rf /boot/efi/* 2>/dev/null || true
+	rm -f /boot/* 2>/dev/null || true
+	# Backup the partitions scheme
+	un_mount
+	mount -a || true
+	sgdisk --backup=/tmp/partitions.map \
+		"/dev/$(lsblk -no pkname "$(findmnt -no SOURCE / 2>/dev/null)")"
+}
+
+overwrite_current() {
+	# Galactic smash
+	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
+		--exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
+		--exclude=/linux64/** --exclude=/efi/** --exclude=/boot/** \
+		/linux64/ /
+
+	( cd /tmp
+	for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
+		until upgradepkg --terse --reinstall --install-new $PKG \
+			2>/dev/null && rm -rf $PKG
+		do
+			echo "Retry installing in 3s: $PKG"
+			sleep 3
+		done
+	done )
+	sed -i -e 's|/usr/local/bin:|/usr/local/bin:/usr/local/sbin:|' \
+		-e 's|/usr/bin:/bin|/usr/bin:/usr/sbin:/bin:/sbin|' /etc/profile
+
+	unset PKG
+}
+
+cleanup() {
+	rm -rf /linux64
+	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
+}
+
+configure_network() {
+	local dev ipaddr conffile cidr netmask
+
+	dev=$(ls /sys/class/net | grep -Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
+	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
+	conffile=/etc/rc.d/rc.inet1.conf
+
+	if [ -n "$ipaddr" ]; then
+		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
+		if [ -n "$cidr" ]; then
+			netmask=$(awk -v p="$cidr" 'BEGIN{
+				if (p<0 || p>32) { print ""; exit }
+				for (i=0;i<4;i++) {
+					if (p>=8) { oct=255; p-=8 }
+					else if (p>0) { oct=256-(2^(8-p)); p=0 }
+					else { oct=0 }
+					mask = mask (i? "." : "") oct
+				}
+				print mask
+			}')
+		else
+			netmask=""
+		fi
+
+		cat > "$conffile" <<-EOF
+		IPADDR[${dev}]="${ipaddr}"
+		NETMASK[${dev}]="${netmask}"
+		USE_DHCP="yes"
+		EOF
+	else
+		cat > "$conffile" <<-EOF
+		IPADDR[${dev}]="dhcp"
+		USE_DHCP="yes"
+		EOF
+	fi
+
+	chmod +x /etc/rc.d/rc.inet1 2>/dev/null
+
+	if [ -f /etc/rc.d/rc.sshd ]; then
+		chmod +x /etc/rc.d/rc.sshd 2>/dev/null
+	fi
+}
+
+configure_bootloader() {
+	local root_dev needs_lvm2
+
+	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
+	needs_lvm2=0
+
+	# Revert the partitions scheme
+	un_mount
+	mount -a || true
+	sgdisk --load-backup=/tmp/partitions.map \
+		"/dev/$(lsblk -no pkname "$root_dev")"
+	# partprobe "/dev/$DISK" 2>/dev/null
+	# udevadm settle 2>/dev/null
+
+	rm -f /tmp/partitions.map
+
+	case $root_dev in
+	/dev/mapper/*) needs_lvm2=1 ;;
+	esac
+
+	if [ $needs_lvm2 -eq 1 ] && [ -f /etc/lvm/lvm.conf ]; then
+		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf \
+			2>/dev/null
+	fi
+
+	if findmnt /efi >/dev/null 2>&1; then
+		umount -l /efi 2>/dev/null
+		rm -rf /efi
+		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab 2>/dev/null
+		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
+		mkdir -p /boot/efi
+	fi
+
+	$(/usr/share/mkinitrd/mkinitrd_command_generator.sh -k $(ls /lib/modules) | grep 'mkinitrd -c')
+	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
+	grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
+
+	if [ -f /etc/lvm/lvm.conf.bak ]; then
+		mv /etc/lvm/lvm.conf.bak /etc/lvm/lvm.conf 2>/dev/null
+	fi
+}
+
+finalize() {
+	if [ -d /etc/ssh/sshd_config.d ]; then
+		printf "PermitRootLogin yes\nPasswordAuthentication yes\n" > /etc/ssh/sshd_config.d/50-Slackware.conf
+	else
+		if grep -q '^#PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null; then
+			sed -i '/^#PermitRootLogin\s/s/.*/PermitRootLogin yes/' /etc/ssh/sshd_config 2>/dev/null
+		else
+			grep -q '^PermitRootLogin' /etc/ssh/sshd_config 2>/dev/null || printf "PermitRootLogin yes\n" >> /etc/ssh/sshd_config
+		fi
+	fi
+
+	if [ -d /etc/rc.d ]; then
+		chmod +x /etc/rc.d/rc.S /etc/rc.d/rc.M /etc/rc.d/rc.local 2>/dev/null
+	fi
+
+	echo 'root:0v3rk1ll' | chpasswd
+	cat <<-EOF
+	Hey there,
+	This machine has been squashed with new Slackware distro.
+
+	Recommended actions (on the VM host console):
+	# sync ; reboot -f
+
+	After reboot you should be able to login as root with '0v3rk1ll'
+	Change it later how you see it fit ;-)
+	EOF
+}
+
+choose_option() {
+	case "$1" in
+		1|--slackware)
+			return 0
+			;;
+		2|--debian)
+			wget -q -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/master/conf.d/vps2deb | sh
+			exit 0
+			;;
+		3|--arch)
+			wget -q -O- https://raw.githubusercontent.com/felixonmars/vps2arch/master/vps2arch | sh
+			exit 0
+			;;
+		4|--opensuse)
+			wget -q -O- https://raw.githubusercontent.com/U2FsdGVkX1/vps2suse/main/vps2suse | sh
+			exit 0
+			;;
+		*)
+			return 1
+			;;
+	esac
+}
+
+show_menu() {
+	cat <<-EOF
+	Supported distributions:
+	1) Slackware -current    (--slackware)
+	2) Debian Bookworm       (--debian)
+	3) Arch Linux -rolling   (--arch)
+	4) openSUSE Tumbleweed   (--opensuse)
+
+	Usage: $0 [option_number|--option_name]
+	EOF
+}
+
+if [ -n "$1" ]; then
+	if ! choose_option "$1"; then
+		echo "Invalid option: $1"
+		show_menu
+		exit 1
+	fi
+else
+	choose_option 1
+fi
+
+cd /
+extract_and_prepare
+configure_base
+backup_old_files
+overwrite_current
+cleanup
+configure_network
+configure_bootloader
+finalize
