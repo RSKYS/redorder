@@ -44,6 +44,7 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 	exit 1
 fi
 
+DISK="/dev/$(lsblk -no pkname $(findmnt -no SOURCE / 2>/dev/null))"
 extract_and_prepare() {
 	local BASE_LINK DL_DIR TMP_GET DAT DIS
 
@@ -103,30 +104,38 @@ un_mount() {
 	local mn
 
 	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|linux64|proc)/ {print $2}' \
-		/proc/mounts | sort -r); do
+		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|linux64)/ {print $2}' \
+		/proc/mounts | sort -r)
+	do
 		umount -l "$mn" 2>/dev/null || true
 	done
 }
 
 backup_old_files() {
-	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
+	cp -fL /etc/hostname /etc/localtime /linux64/etc/ \
+		2>/dev/null || true
+	# Backup the partitions scheme
+	sgdisk --backup='/tmp/partitions.map' $DISK
+}
+
+cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	# Backup the partitions scheme
 	un_mount
-	mount -a || true
-	sgdisk --backup=/tmp/partitions.map \
-		"/dev/$(lsblk -no pkname "$(findmnt -no SOURCE / 2>/dev/null)")"
 }
 
 overwrite_current() {
 	# Galactic smash
+	cleanup
+
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
-		--exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
-		--exclude=/linux64/** --exclude=/efi/** --exclude=/boot/** \
+		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
+		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/linux64/ /
 
+	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
+
+	rm -rf /linux64 || true
 	( cd /tmp
 	for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
 		until upgradepkg --terse --reinstall --install-new $PKG \
@@ -140,11 +149,6 @@ overwrite_current() {
 		-e 's|/usr/bin:/bin|/usr/bin:/usr/sbin:/bin:/sbin|' /etc/profile
 
 	unset PKG
-}
-
-cleanup() {
-	rm -rf /linux64
-	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 }
 
 configure_network() {
@@ -196,15 +200,22 @@ configure_bootloader() {
 	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
 	needs_lvm2=0
 
-	# Revert the partitions scheme
-	un_mount
-	mount -a || true
-	sgdisk --load-backup=/tmp/partitions.map \
-		"/dev/$(lsblk -no pkname "$root_dev")"
-	# partprobe "/dev/$DISK" 2>/dev/null
-	# udevadm settle 2>/dev/null
+	if findmnt /efi >/dev/null 2>&1; then
+		umount -l /efi 2>/dev/null
+		rm -rf /efi
+		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab 2>/dev/null
+		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
+	fi
 
-	rm -f /tmp/partitions.map
+	mkdir -p /boot/efi
+	mount -a || true
+
+	# Revert the partitions scheme
+	sgdisk --load-backup='/tmp/partitions.map' $DISK
+	#partprobe "/dev/$DISK" 2>/dev/null
+	#udevadm settle 2>/dev/null
+
+	#rm -f /tmp/partitions.map
 
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
@@ -213,14 +224,6 @@ configure_bootloader() {
 	if [ $needs_lvm2 -eq 1 ] && [ -f /etc/lvm/lvm.conf ]; then
 		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf \
 			2>/dev/null
-	fi
-
-	if findmnt /efi >/dev/null 2>&1; then
-		umount -l /efi 2>/dev/null
-		rm -rf /efi
-		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab 2>/dev/null
-		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
-		mkdir -p /boot/efi
 	fi
 
 	$(/usr/share/mkinitrd/mkinitrd_command_generator.sh -k $(ls /lib/modules) | grep 'mkinitrd -c')
@@ -310,7 +313,8 @@ extract_and_prepare
 configure_base
 backup_old_files
 overwrite_current
-cleanup
 configure_network
 configure_bootloader
 finalize
+
+unset DISK

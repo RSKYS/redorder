@@ -21,6 +21,7 @@ set -e
 mirror="https://mirror.rackspace.com"
 version="bookworm"
 
+DISK="/dev/$(lsblk -no pkname $(findmnt -no SOURCE / 2>/dev/null))"
 extract_and_prepare() {
 	rm -rf /tmp/build /Debian
 	mkdir -p /tmp/build /Debian
@@ -64,39 +65,36 @@ un_mount() {
 	local mn
 
 	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|Debian|proc)/ {print $2}' \
-		/proc/mounts | sort -r); do
+		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|Debian)/ {print $2}' \
+		/proc/mounts | sort -r)
+	do
 		umount -l "$mn" 2>/dev/null || true
 	done
 }
 
 backup_old_files() {
-	cp -fL /etc/hostname /etc/localtime /linux64/etc/ 2>/dev/null
-	rm -rf /boot/efi/* 2>/dev/null || true
-	rm -f /boot/* 2>/dev/null || true
+	cp -fL /etc/hostname /etc/localtime /Debian/etc/ \
+		2>/dev/null || true
 	# Backup the partitions scheme
-	un_mount
-	mount -a || true
-	sgdisk --backup=/tmp/partitions.map \
-		"/dev/$(lsblk -no pkname "$(findmnt -no SOURCE / 2>/dev/null)")"
+	sgdisk --backup='/tmp/partitions.map' $DISK
 }
 
 cleanup() {
-	rm -rf /Debian
-	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
+	rm -rf /boot/efi/* 2>/dev/null || true
+	rm -f /boot/* 2>/dev/null || true
+	un_mount
 }
 
 overwrite_system() {
-	rm -rf /boot/efi/* 2>/dev/null || true
-	rm -f /boot/* 2>/dev/null || true
+	cleanup
 
-	# sync Debian tree into root
-	rsync -aHAX --numeric-ids --delete-after \
-		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** --exclude=/tmp/** \
+	# Galactic smash
+	rsync -aHAX --numeric-ids --delete-after --exclude=/tmp/** \
+		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
 		--exclude=/Debian/** --exclude=/efi/** --exclude=/boot/** \
 		/Debian/ /
 
-	cleanup
+	rm -rf /Debian || true
 
 	cat > /etc/apt/sources.list <<-MGM
 	deb $mirror/debian/ $version contrib main non-free non-free-firmware
@@ -121,8 +119,7 @@ overwrite_system() {
 
 	update-ca-certificates
 
-	DEBIAN_FRONTEND=noninteractive \
-		apt update
+	apt update
 
 	DEBIAN_FRONTEND=noninteractive \
 			apt install -y --no-install-recommends --no-install-suggests \
@@ -174,10 +171,7 @@ overwrite_system() {
 	DEBIAN_FRONTEND=noninteractive \
 		apt dist-upgrade --auto-remove -y
 
-	DEBIAN_FRONTEND=noninteractive \
-		apt install -y linux-image-amd64 linux-headers-amd64
-
-	unset DEBIAN_FRONTEND
+	apt install -y linux-image-amd64 linux-headers-amd64
 }
 
 configure_network() {
@@ -228,26 +222,24 @@ configure_bootloader() {
 	root_dev=$(findmnt -no SOURCE / 2>/dev/null)
 	needs_lvm2=0
 
-	# Revert the partitions scheme
-	un_mount
-	mount -a || true
-	sgdisk --load-backup=/tmp/partitions.map \
-		"/dev/$(lsblk -no pkname "$root_dev")"
+	if findmnt /efi >/dev/null 2>&1; then
+		umount -l /efi
+		rm -rf /efi
+		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab || true
+	fi
 
-	rm -f /tmp/partitions.map
+	mkdir -p /boot/efi
+	mount -a || true
+
+	# Revert the partitions scheme
+	sgdisk --load-backup='/tmp/partitions.map' $DISK
+
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
 	esac
 
 	if [ $needs_lvm2 -eq 1 ] && [ -f /etc/lvm/lvm.conf ]; then
 		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf 2>/dev/null
-	fi
-
-	if findmnt /efi >/dev/null 2>&1; then
-		umount -l /efi
-		rm -rf /efi
-		mkdir -p /boot/efi
-		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab || true
 	fi
 
 	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
@@ -322,3 +314,5 @@ overwrite_system
 configure_network
 configure_bootloader
 finalize
+
+unset DISK mirror version
