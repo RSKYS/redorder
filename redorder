@@ -44,9 +44,6 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-ROOTDEV=$(findmnt -n -o SOURCE / 2>/dev/null)
-DISK=$(lsblk -no pkname "$ROOTDEV" 2>/dev/null)
-
 extract_and_prepare() {
 	local BASE_LINK DL_DIR TMP_GET DAT DIS
 
