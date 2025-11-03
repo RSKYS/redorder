@@ -22,7 +22,7 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 - [X] Arch Linux
 - [ ] Debian
 - [X] openSUSE
-- [ ] Slackware
+- [X] Slackware
 - [ ] Void
 - [ ] NixOS (Maybe)
 - [ ] Playbook (Maybe)

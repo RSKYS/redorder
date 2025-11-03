@@ -61,16 +61,16 @@ extract_and_prepare() {
 
 }
 
-un_mount() {
-	local mn
+# un_mount() {
+# 	local mn
 
-	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|Debian)/ {print $2}' \
-		/proc/mounts | sort -r)
-	do
-		umount -l "$mn" 2>/dev/null || true
-	done
-}
+# 	for mn in $(awk '$2 != "/" &&
+# 		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|Debian)/ {print $2}' \
+# 		/proc/mounts | sort -r)
+# 	do
+# 		umount -l "$mn" 2>/dev/null || true
+# 	done
+# }
 
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /Debian/etc/ \
@@ -82,7 +82,7 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	un_mount
+	# un_mount
 }
 
 overwrite_system() {
@@ -93,6 +93,8 @@ overwrite_system() {
 		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
 		--exclude=/Debian/** --exclude=/efi/** --exclude=/boot/** \
 		/Debian/ /
+
+	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 	rm -rf /Debian || true
 
@@ -118,11 +120,11 @@ overwrite_system() {
 	LCL
 
 	update-ca-certificates
+	export DEBIAN_FRONTEND=noninteractive
 
+	# Not too raw.. I still want ubuntu stuff a bit
 	apt update
-
-	DEBIAN_FRONTEND=noninteractive \
-			apt install -y --no-install-recommends --no-install-suggests \
+	apt install -y --no-install-recommends --no-install-suggests \
 		adwaita-icon-theme appstream apt-file at-spi2-core bash bash-completion bc \
 		bcache-tools bolt btrfs-progs build-essential byobu ca-certificates \
 		command-not-found console-setup cron cryptsetup cryptsetup-initramfs curl \
@@ -165,12 +167,9 @@ overwrite_system() {
 		tpm-udev udisks2 upower usb-modeswitch usb.ids usbutils usrmerge uuid-runtime \
 		vim wget wireless-regdb xauth xdg-user-dirs xfsprogs xml-core zerofree zstd
 
-	DEBIAN_FRONTEND=noninteractive \
-		dpkg-reconfigure locales
-	
-	DEBIAN_FRONTEND=noninteractive \
-		apt dist-upgrade --auto-remove -y
+	dpkg-reconfigure locales
 
+	apt dist-upgrade --auto-remove -y
 	apt install -y linux-image-amd64 linux-headers-amd64
 }
 
@@ -228,8 +227,8 @@ configure_bootloader() {
 		sed -i 's/\/efi/\/boot\/efi/' /etc/fstab || true
 	fi
 
-	mkdir -p /boot/efi
-	mount -a || true
+	# mkdir -p /boot/efi
+	# mount -a || true
 
 	# Revert the partitions scheme
 	sgdisk --load-backup='/tmp/partitions.map' $DISK

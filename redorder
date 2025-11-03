@@ -100,16 +100,16 @@ configure_base() {
 	fi
 }
 
-un_mount() {
-	local mn
+# un_mount() {
+# 	local mn
 
-	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|linux64)/ {print $2}' \
-		/proc/mounts | sort -r)
-	do
-		umount -l "$mn" 2>/dev/null || true
-	done
-}
+# 	for mn in $(awk '$2 != "/" &&
+# 		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|linux64)/ {print $2}' \
+# 		/proc/mounts | sort -r)
+# 	do
+# 		umount -l "$mn" 2>/dev/null || true
+# 	done
+# }
 
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /linux64/etc/ \
@@ -121,17 +121,16 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	un_mount
 }
 
 overwrite_current() {
-	# Galactic smash
 	cleanup
 
+	# Galactic smash
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
-		/linux64/ /
+		/linux64/ / || true
 
 	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
@@ -207,15 +206,7 @@ configure_bootloader() {
 		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
 	fi
 
-	mkdir -p /boot/efi
-	mount -a || true
-
-	# Revert the partitions scheme
 	sgdisk --load-backup='/tmp/partitions.map' $DISK
-	#partprobe "/dev/$DISK" 2>/dev/null
-	#udevadm settle 2>/dev/null
-
-	#rm -f /tmp/partitions.map
 
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
@@ -250,7 +241,9 @@ finalize() {
 		chmod +x /etc/rc.d/rc.S /etc/rc.d/rc.M /etc/rc.d/rc.local 2>/dev/null
 	fi
 
+	echo "\nneofetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
+
 	cat <<-EOF
 	Hey there,
 	This machine has been squashed with new Slackware distro.
