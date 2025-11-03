@@ -20,9 +20,9 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 
 - [ ] Alpine
 - [X] Arch Linux
-- [X] Debian
+- [ ] Debian
 - [X] openSUSE
-- [X] Slackware
+- [ ] Slackware
 - [ ] Void
 - [ ] NixOS (Maybe)
 - [ ] Playbook (Maybe)
