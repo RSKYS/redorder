@@ -61,11 +61,7 @@ extract_and_prepare() {
 	tar -xpf /base.tar -C /linux64
 	rm -f /base.tar
 
-	if [ -f /etc/resolv.conf ]; then
-		cp -L /etc/resolv.conf /linux64/etc/resolv.conf
-	else
-		echo "nameserver 1.1.1.1" > /linux64/etc/resolv.conf
-	fi
+	echo "nameserver 1.1.1.1" > /linux64/etc/resolv.conf
 
     # Get packages for later
 	( cd /tmp
@@ -130,7 +126,7 @@ overwrite_current() {
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
-		/linux64/ / || true
+		/linux64/ / 2>/dev/null || true
 
 	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
@@ -151,33 +147,19 @@ overwrite_current() {
 }
 
 configure_network() {
-	local dev ipaddr conffile cidr netmask
+	local dev ipaddr gateway conffile
 
 	dev=$(ls /sys/class/net | grep -Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
-	ipaddr=$(ip -4 addr show dev "$dev" | awk '($1=="inet"){print $2; exit}')
+	ipaddr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
+	gateway=$(ip -4 route show default | awk '/default/ {print $3; exit}')
 	conffile=/etc/rc.d/rc.inet1.conf
 
-	if [ -n "$ipaddr" ]; then
-		cidr=$(echo "$ipaddr" | awk -F/ '{print $2}')
-		if [ -n "$cidr" ]; then
-			netmask=$(awk -v p="$cidr" 'BEGIN{
-				if (p<0 || p>32) { print ""; exit }
-				for (i=0;i<4;i++) {
-					if (p>=8) { oct=255; p-=8 }
-					else if (p>0) { oct=256-(2^(8-p)); p=0 }
-					else { oct=0 }
-					mask = mask (i? "." : "") oct
-				}
-				print mask
-			}')
-		else
-			netmask=""
-		fi
-
+	# Writing services
+	if [ -n "$ipaddr" ] && [ -n "$gateway" ]; then
 		cat > "$conffile" <<-EOF
 		IPADDR[${dev}]="${ipaddr}"
-		NETMASK[${dev}]="${netmask}"
-		USE_DHCP="yes"
+		GATEWAY="${gateway}"
+		USE_DHCP="no"
 		EOF
 	else
 		cat > "$conffile" <<-EOF
@@ -217,6 +199,7 @@ configure_bootloader() {
 			2>/dev/null
 	fi
 
+	removepkg elilo lilo >/dev/null 2>&1 || true
 	$(/usr/share/mkinitrd/mkinitrd_command_generator.sh -k $(ls /lib/modules) | grep 'mkinitrd -c')
 	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
 	grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
@@ -259,6 +242,7 @@ finalize() {
 choose_option() {
 	case "$1" in
 		1|--slackware)
+			echo 'Installing Slackware -current..'
 			return 0
 			;;
 		2|--debian)
