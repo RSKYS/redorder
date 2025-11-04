@@ -23,14 +23,68 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
+
+docker_install() {
+	local ARCH VER VER_BX
+
+	ARCH=$(uname -m)
+	VER=$(wget -qO- https://download.docker.com/linux/static/stable/x86_64/ | \
+          grep -oE 'docker-[0-9]+\.[0-9]+\.[0-9]+\.tgz' | \
+          sort -V | tail -n1 | cut -d- -f2 | cut -d. -f1-3)
+
+	VER_BX=$(wget -qO- https://api.github.com/repos/docker/buildx/releases/latest \
+          | grep '"tag_name"' | cut -d'"' -f4)
+
+	if [ ! "$ARCH" = "x86_64" ]; then
+		echo "This package is only for $ARCH."
+		exit 1
+	fi
+
+	rm -rf /tmp/* || true
+
+	wget -q "https://download.docker.com/linux/static/stable/$ARCH/docker-${VER}.tgz" \
+		-O /tmp/docker.tgz
+	# Docker main
+	tar xzf /tmp/docker.tgz -C /tmp
+	install -m0755 /tmp/docker/* /usr/local/bin/
+
+	wget \
+     "https://github.com/docker/buildx/releases/download/$VER_BX/buildx-${VER_BX}.linux-amd64" \
+	 	-O /tmp/docker-buildx
+	install -m0755 /tmp/docker-buildx /usr/local/bin/docker-buildx
+
+	cat > /etc/systemd/system/docker.service <<-EOF
+	[Unit]
+	Description=Docker Service
+	After=network-online.target containerd.service
+
+	[Service]
+	Type=notify
+	ExecStart=/usr/local/bin/dockerd
+	Restart=always
+	Delegate=yes
+
+	[Install]
+	WantedBy=multi-user.target
+
+	EOF
+
+	systemctl daemon-reload
+	systemctl enable docker --now
+
+	getent group docker >/dev/null || groupadd docker
+	usermod -aG docker "$USER"
+}
+
 if ! command -v wget >/dev/null 2>&1; then
 	echo "This script requires wget."
 	exit 1
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-	echo "This script requires docker."
-	apt update && apt install -y docker.io 2>/dev/null || exit 1
+	echo "Let me install docker ..."
+	docker_install 2>/dev/null || exit 1
 fi
 
 if ! command -v sgdisk >/dev/null 2>&1 ; then
@@ -126,8 +180,6 @@ overwrite_current() {
 		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/linux64/ / || true
-
-	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 	rm -rf /linux64 >/dev/null 2>&1 || true
 	( cd /tmp

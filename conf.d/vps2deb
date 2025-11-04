@@ -83,7 +83,7 @@ if ! command -v wget >/dev/null 2>&1; then
 fi
 
 if ! command -v docker >/dev/null 2>&1; then
-	echo "This script requires docker."
+	echo "Let me install docker ..."
 	docker_install 2>/dev/null || exit 1
 fi
 
