@@ -17,6 +17,7 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 ⚠️ **Btw, your root will be purged permanently!**
 
 ## TODO
+🎶 Consider a donation as I'm really doing these outta personal use, toss a little [coin] if you like.
 
 - [ ] Alpine
 - [X] Arch Linux
@@ -27,6 +28,6 @@ wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder
 - [ ] NixOS (Maybe)
 - [ ] Playbook (Maybe)
 
-🎶 Consider a donation as I'm really doing these outta personal use, toss a little [coin] if you like.
+(Above also shows general status; I might be messing around.)
 
 [coin]:https://github.com/RSKYS/RSKYS/blob/master/README.md

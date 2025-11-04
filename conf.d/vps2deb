@@ -23,6 +23,17 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
+# For some reason.. my method won't work with old env.
+if [ ! "$(uname -r | cut -d. -f1)" -ge 6 ]; then
+	echo "Sorry.. kernel is outdated for this script."
+	exit 1
+fi
+
+if ! command -v wget >/dev/null 2>&1; then
+	echo "This script requires wget."
+	exit 1
+fi
+
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 docker_install() {
@@ -77,18 +88,9 @@ docker_install() {
 	usermod -aG docker "$USER"
 }
 
-if ! command -v wget >/dev/null 2>&1; then
-	echo "This script requires wget."
-	exit 1
-fi
-
 if ! command -v docker >/dev/null 2>&1; then
 	echo "Let me install docker ..."
 	docker_install 2>/dev/null || exit 1
-fi
-
-if ! command -v sgdisk >/dev/null 2>&1 ; then
-	echo "This script requires gdisk for mapping."
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then

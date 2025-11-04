@@ -23,6 +23,17 @@ if [ "$(id -u)" -ne 0 ]; then
 	exit 1
 fi
 
+# For some reason.. my method won't work with old env.
+if [ ! "$(uname -r | cut -d. -f1)" -ge 6 ]; then
+	echo "Sorry.. kernel is outdated for this script."
+	exit 1
+fi
+
+if ! command -v wget >/dev/null 2>&1; then
+	echo "This script requires wget."
+	exit 1
+fi
+
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 docker_install() {
@@ -77,20 +88,15 @@ docker_install() {
 	usermod -aG docker "$USER"
 }
 
-if ! command -v wget >/dev/null 2>&1; then
-	echo "This script requires wget."
-	exit 1
-fi
-
 if ! command -v docker >/dev/null 2>&1; then
 	echo "Let me install docker ..."
 	docker_install 2>/dev/null || exit 1
 fi
 
-if ! command -v sgdisk >/dev/null 2>&1 ; then
-	echo "This script requires gdisk for mapping."
-	apt update && apt install -y gdisk 2>/dev/null || exit 1
-fi
+# if ! command -v sgdisk >/dev/null 2>&1 ; then
+# 	echo "This script requires gdisk for mapping."
+# 	exit 1
+# fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
 	echo "rsync required to install extracted Slackware tree."
@@ -164,7 +170,7 @@ backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /linux64/etc/ \
 		2>/dev/null || true
 	# Backup the partitions scheme
-	sgdisk --backup='/tmp/partitions.map' $DISK
+	# sgdisk --backup='/tmp/partitions.map' $DISK
 }
 
 cleanup() {
@@ -239,7 +245,7 @@ configure_bootloader() {
 		[ -f /etc/fstab.tmp ] && mv /etc/fstab.tmp /etc/fstab
 	fi
 
-	sgdisk --load-backup='/tmp/partitions.map' $DISK
+	# sgdisk --load-backup='/tmp/partitions.map' $DISK
 
 	case $root_dev in
 	/dev/mapper/*) needs_lvm2=1 ;;
