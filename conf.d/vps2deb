@@ -76,7 +76,6 @@ extract_and_prepare() {
 	docker rm -f deb_tmp
 	docker rmi base_sys
 	tar -xf /tmp/base.tar -C /Debian
-	chown -R root:root /Debian || true
 	rm -f /tmp/base.tar
 
 	echo "nameserver 1.1.1.1" > /Debian/etc/resolv.conf
@@ -153,51 +152,48 @@ overwrite_system() {
 		init-system-helpers iproute2 iputils-ping less logsave lsof mawk \
 		ncurses-base netbase netcat-openbsd passwd perl-base sed sensible-utils \
 		tar util-linux zlib1g initramfs-tools initramfs-tools-core kmod \
-		linux-base linux-image-amd64 systemd systemd-sysv adduser bind9-host \
+		linux-base linux-image-amd64 systemd-sysv adduser bind9-host \
 		bridge-utils btrfs-progs curl dnsutils ethtool ifupdown isc-dhcp-client \
 		isc-dhcp-common libnss-myhostname libpam-systemd net-tools netplan.io \
 		openssh-client openssh-server tcpdump vlan wget at bc binutils \
 		binutils-x86-64-linux-gnu bsdmainutils byobu command-not-found cron dbus \
 		distro-info-data dosfstools ed file finger htop info iotop lshw ltrace \
-		man-db manpages mdadm mtr-tiny nano ntp parted pciutils powermgmt-base \
+		man-db manpages mdadm mtr-tiny nano parted pciutils powermgmt-base \
 		psmisc python3 python3-minimal readline-common rsyslog screen strace \
-		sysstat tasksel tmux traceroute usbutils uuid-runtime vim vim-scripts \
+		sysstat tasksel tmux traceroute usbutils uuid-runtime vim \
 		wamerican x11-common xkb-data cryptsetup cryptsetup-initramfs dmsetup \
-		efibootmgr gdisk lvm2 multipath-tools nvme-cli open-iscsi open-vm-tools \
-		rsync sg3-utils smartmontools squashfs-tools thin-proventioning-tools \
+		efibootmgr gdisk lvm2 multipath-tools nvme-cli open-iscsi alsa-utils \
+		rsync sg3-utils smartmontools squashfs-tools open-vm-tools \
 		xfsprogs zfsutils-linux apparmor apt apt-utils ca-certificates fail2ban \
 		gnupg gnupg2 gpgconf openssl p11-kit policykit-1 publicsuffix \
-		python3-apt python3-crypto python3-requests python3-setuptools \
-		python3-urllib3 python3-yaml sudo ufw unattended-upgrades acpid alsa-utils \
+		python3-apt python3-requests python3-setuptools vim-scripts \
+		python3-urllib3 python3-yaml sudo ufw unattended-upgrades acpid \
 		anacron cpufrequtils dbus-broker desktop-file-utils dmraid dnsmasq-base \
-		dpkg-dev eject exfat-utils fuse3 git git-man grub-common linux-headers-amd64 \
+		dpkg-dev eject fuse3 git git-man grub-common linux-headers-amd64 \
 		grub-efi-amd64 grub2-common hdparm hwdata irqbalance kpartx lm-sensors \
-		logrotate lrzip lxc lxd make manpages-dev mcelog memtest86+ modemmanager \
-		moreutils mosh ncdu neofetch netcat netcat-traditional nfs-common \
-		open-vm-tools openvpn os-prober partman-auto partman-basicfilesystems \
-		partman-efi partman-ext3 partman-lvm partman-md partman-partitioning \
-		partman-target passwd pastebinit patch pciutils perf pigz pkg-config \
-		plymouth pm-utils popularity-contest powertop ppp pppd pptp-linux procps \
+		logrotate lrzip lxc lxd make manpages-dev memtest86+ modemmanager \
+		moreutils mosh ncdu neofetch netcat-traditional nfs-common \
+		open-vm-tools openvpn os-prober passwd pastebinit patch pciutils pigz \
+		plymouth pm-utils popularity-contest powertop ppp pptp-linux procps \
 		pv python3-cffi-backend python3-chardet python3-configobj \
 		python3-cryptography python3-dbus python3-debian python3-distro \
 		python3-gi python3-idna python3-jinja2 python3-jsonschema python3-lxml \
-		python3-netplan python3-newt python3-oauthlib python3-paramiko \
-		python3-pip python3-ply python3-psutil python3-pyasn1 python3-ryu \
-		python3-sosreport python3-urwid qemu-guest-agent quota radvd rpcbind \
-		rpm rpm2cpio rsnapshot rtkit ruby ruby-json ruby-minitest ruby-net-telnet \
+		python3-newt python3-oauthlib python3-paramiko pkg-config \
+		python3-pip python3-ply python3-psutil python3-pyasn1 \
+		python3-urwid qemu-guest-agent quota radvd rpcbind ruby-net-telnet \
+		rpm rpm2cpio rsnapshot rtkit ruby ruby-json ruby-minitest \
 		ruby-power-assert ruby-test-unit ruby-xmlrpc runc rxvt-unicode safe-rm \
 		samba-common samba-common-bin sane-utils sbcl scdaemon schedtool scrot \
 		seabios secure-delete sgml-base shared-mime-info shellcheck shim-signed \
 		smartmontools socat software-properties-common sqlite3 ssh-import-id \
 		ssl-cert stress stunnel4 subversion sysbench sysfsutils systemd-coredump \
-		systemd-journal-remote systemd-timesyncd sysvinit-utils t1utils telnet \
-		testdisk texinfo texlive-base texlive-binaries texlive-common \
+		systemd-journal-remote systemd-timesyncd sysvinit-utils t1utils \
+		testdisk texinfo texlive-base texlive-binaries traceroute telnet \
 		texlive-fonts-recommended texlive-latex-base texlive-latex-recommended \
-		thin-provisioning-tools tigervnc-standalone-server traceroute tree \
-		ttf-dejavu-core ttf-liberation u-boot-tools udisks2 ufw uget unar \
-		unbound unrar-free unzip usb-modeswitch usbutils uuid-runtime vbetool \
-		vde2 vim-gui-common vim-runtime vim vinagre virt-what virtualbox-guest-utils \
-		vorbis-tools w3m wamerican wamerican-large w3m-img
+		thin-provisioning-tools tigervnc-standalone-server tree w3m-img \
+		u-boot-tools udisks2 ufw uget unar vim-runtime vim vbetool \
+		unbound unrar-free unzip usb-modeswitch usbutils uuid-runtime \
+		vde2 vinagre virt-what vorbis-tools w3m wamerican wamerican-large
 
 	# Making sure one last time
 	dpkg --configure -a
