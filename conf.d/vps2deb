@@ -18,6 +18,9 @@
 
 set -e
 
+mirror="http://ftp.uk.debian.org"
+version="forky"
+
 if [ "$(id -u)" -ne 0 ]; then
 	echo "This script must be run as root."
 	exit 1
@@ -33,8 +36,6 @@ if ! command -v wget >/dev/null 2>&1; then
 	echo "This script requires wget."
 	exit 1
 fi
-
-export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 docker_install() {
 	local ARCH VER VER_BX
@@ -98,8 +99,7 @@ if ! command -v rsync >/dev/null 2>&1 ; then
 	exit 1
 fi
 
-mirror="http://ftp.uk.debian.org"
-version="bookworm"
+export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 extract_and_prepare() {
 	rm -rf /tmp/build /Debian
@@ -197,7 +197,7 @@ overwrite_system() {
 	apt update
 	apt dist-upgrade --auto-remove -y
 
-	apt install -y --reinstall --no-install-suggests \
+	apt install -y --reinstall --no-install-suggests --no-install-recommends \
 		base-files base-passwd bash bash-completion bzip2 coreutils dash debconf \
 		debianutils diffutils dpkg findutils gnupg grep gzip hostname \
 		init-system-helpers iproute2 iputils-ping less logsave lsof mawk \
@@ -216,14 +216,14 @@ overwrite_system() {
 		efibootmgr gdisk lvm2 multipath-tools nvme-cli open-iscsi alsa-utils \
 		rsync sg3-utils smartmontools squashfs-tools open-vm-tools \
 		xfsprogs zfsutils-linux apparmor apt apt-utils ca-certificates fail2ban \
-		gnupg gnupg2 gpgconf openssl p11-kit policykit-1 publicsuffix \
+		gnupg gnupg2 gpgconf openssl p11-kit publicsuffix \
 		python3-apt python3-requests python3-setuptools vim-scripts \
 		python3-urllib3 python3-yaml sudo acpid wamerican wamerican-large \
-		anacron cpufrequtils dbus-broker desktop-file-utils dmraid dnsmasq-base \
+		anacron dbus-broker desktop-file-utils dnsmasq-base \
 		dpkg-dev eject fuse3 git git-man grub-common linux-headers-amd64 \
 		grub-efi-amd64 grub2-common hdparm hwdata irqbalance kpartx lm-sensors \
-		logrotate lrzip lxc lxd make manpages-dev memtest86+ modemmanager \
-		moreutils mosh ncdu neofetch netcat-traditional nfs-common \
+		logrotate lrzip lxc make manpages-dev memtest86+ modemmanager \
+		moreutils mosh ncdu fastfetch netcat-traditional nfs-common \
 		open-vm-tools openvpn os-prober passwd pastebinit patch pciutils pigz \
 		plymouth pm-utils popularity-contest powertop ppp pptp-linux procps \
 		pv python3-cffi-backend python3-chardet python3-configobj \
@@ -236,15 +236,15 @@ overwrite_system() {
 		ruby-power-assert ruby-test-unit ruby-xmlrpc runc rxvt-unicode safe-rm \
 		samba-common samba-common-bin sane-utils sbcl scdaemon schedtool scrot \
 		seabios secure-delete sgml-base shared-mime-info shellcheck shim-signed \
-		smartmontools socat software-properties-common sqlite3 ssh-import-id \
-		ssl-cert stress stunnel4 subversion sysbench sysfsutils systemd-coredump \
+		smartmontools socat sqlite3 ssh-import-id systemd-coredump \
+		ssl-cert stress stunnel4 subversion sysbench sysfsutils \
 		systemd-journal-remote systemd-timesyncd sysvinit-utils t1utils \
 		testdisk texinfo texlive-base texlive-binaries traceroute telnet \
 		texlive-fonts-recommended texlive-latex-base texlive-latex-recommended \
 		thin-provisioning-tools tigervnc-standalone-server tree w3m-img \
 		u-boot-tools udisks2 ufw uget unar vim-runtime vim vbetool \
 		unbound unrar-free unzip usb-modeswitch usbutils uuid-runtime \
-		vde2 vinagre virt-what vorbis-tools w3m
+		vde2 virt-what vorbis-tools w3m
 
 	# Making sure one last time
 	dpkg --configure -a
@@ -338,7 +338,7 @@ finalize() {
 		fi
 	fi
 
-	echo "\nneofetch\n" >> /etc/profile
+	echo "\nfastfetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
 
 	cat <<-EOF
