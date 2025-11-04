@@ -58,7 +58,8 @@ extract_and_prepare() {
 	docker export slak_tmp -o /base.tar
 	docker rm -f slak_tmp
 	docker rmi aclemons/slackware:current
-	tar -xpf /base.tar -C /linux64
+	tar -xf /base.tar -C /linux64
+	chown -R root:root /linux64 || true
 	rm -f /base.tar
 
 	echo "nameserver 1.1.1.1" > /linux64/etc/resolv.conf
@@ -130,7 +131,7 @@ overwrite_current() {
 
 	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
-	rm -rf /linux64 || true
+	rm -rf /linux64 >/dev/null 2>&1 || true
 	( cd /tmp
 	for PKG in $(find . -type f -regex '.*\.t.z$' -printf '%P\n'); do
 		until upgradepkg --terse --reinstall --install-new $PKG \
@@ -267,8 +268,8 @@ show_menu() {
 	cat <<-EOF
 	Supported distributions:
 	1) Slackware -current    (--slackware)
-	2) Debian Bookworm       (--debian)
-	3) Arch Linux -rolling   (--arch)
+	2) Debian 		         (--debian)
+	3) Arch Linux 		     (--arch)
 	4) openSUSE Tumbleweed   (--opensuse)
 
 	Usage: $0 [option_number|--option_name]
