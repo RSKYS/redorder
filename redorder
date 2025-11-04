@@ -125,7 +125,7 @@ overwrite_current() {
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
-		/linux64/ / 2>/dev/null || true
+		/linux64/ / || true
 
 	export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
