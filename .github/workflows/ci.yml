@@ -1,0 +1,27 @@
+name: Execute RedOrder Scripts
+
+on:
+  push:
+    branches:
+      - develop
+
+jobs:
+  exec-redorder:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Execute redorder
+        run: |
+          wget -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/develop/redorder | sudo sh
+
+  exec-vps2deb:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Execute vps2deb
+        run: |
+          wget -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/develop/conf.d/vps2deb | sudo sh
