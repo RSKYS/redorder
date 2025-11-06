@@ -89,9 +89,25 @@ docker_install() {
 	usermod -aG docker "$USER"
 }
 
+docker_compose_i() {
+	local VER
+
+	VER=$(wget -qO- https://github.com/docker/compose/releases/ \
+		| grep -oE 'releases/tag/v[0-9]+\.[0-9]+\.[0-9]+' \
+		| head -n1 | grep -oE '[0-9]+\.[0-9]+\.[0-9]+')
+	wget -q https://github.com/docker/compose/releases/download/$VER/docker-compose-linux-x86_64 \
+		-O /tmp/docker-compose
+	install -m0755 /tmp/docker-compose /usr/local/bin/docker-compose
+}
+
 if ! command -v docker >/dev/null 2>&1; then
 	echo "Let me install docker ..."
 	docker_install 2>/dev/null || exit 1
+fi
+
+if ! command -v docker-compose >/dev/null 2>&1 ; then
+	echo "Let's install compose ..."
+	docker_compose_i 2>/dev/null || exit 1
 fi
 
 if ! command -v rsync >/dev/null 2>&1 ; then
@@ -102,40 +118,58 @@ fi
 export PATH="/usr/local/bin:/usr/local/sbin:/usr/bin:/usr/sbin:/bin:/sbin:/usr/games"
 
 extract_and_prepare() {
-	rm -rf /tmp/build /Debian
-	mkdir -p /tmp/build /Debian
+	rm -rf /Debian
+	mkdir -p /Debian
 	# Extract base from Docker
-	cat > /tmp/build/Dockerfile <<-INIT
+	cat > Dockerfile <<-INIT
 	FROM debian:$version AS builder
 	USER root
 
 	RUN apt update && apt -y install debootstrap
-	RUN mkdir -p /mnt && \
-		debootstrap --arch amd64 \
-		--include=sudo,dbus,bash,vim,wget,ca-certificates,zstd \
-		$version /mnt $mirror/debian
-
-	FROM scratch
-	COPY --from=builder /mnt /
 
 	CMD ["/bin/bash"]
+
 	INIT
 
-	( cd /tmp/build
-	if ! command -v docker-buildx >/dev/null 2>&1; then
-		DOCKER_BUILDKIT=1 \
-			docker build -t base_sys .
-	else
-		docker-buildx build -t base_sys . || \
-			echo "This script need's buildx" && exit 1
-	fi )
+	cat > docker-compose.yml <<-INIT
+	version: "3.9"
 
-	docker create --name deb_tmp base_sys
-	docker export deb_tmp -o /tmp/base.tar
-	docker rm -f deb_tmp
-	docker rmi base_sys
-	tar -xf /tmp/base.tar -C /Debian
-	rm -f /tmp/base.tar
+	services:
+	debootstrap:
+		build:
+		context: .
+		dockerfile: Dockerfile
+
+		container_name: debian-bootstrap
+		privileged: true
+		volumes:
+		- ./Debian:/mnt
+		command: >
+			debootstrap --arch amd64
+				--include=sudo,dbus,bash,vim,wget,ca-certificates,zstd
+				$version /mnt $mirror/debian
+
+	INIT
+
+	# ( cd /tmp/build
+	# if ! command -v docker-buildx >/dev/null 2>&1; then
+	# 	DOCKER_BUILDKIT=1 \
+	# 		docker build -t base_sys .
+	# else
+	# 	docker-buildx build -t base_sys . || \
+	# 		echo "This script need's buildx" && exit 1
+	# fi )
+
+	( cd /
+	  docker-compose up --build || true
+	  docker-compose down --remove-orphans || true )
+
+	# docker create --name deb_tmp base_sys
+	# docker export deb_tmp -o /tmp/base.tar
+	# docker rm -f deb_tmp
+	# docker rmi base_sys
+	# tar -xf /tmp/base.tar -C /Debian
+	# rm -f /tmp/base.tar
 
 	echo "nameserver 1.1.1.1" > /Debian/etc/resolv.conf
 }
