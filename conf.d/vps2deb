@@ -134,17 +134,6 @@ extract_and_prepare() {
 	echo "nameserver 1.1.1.1" > /Debian/etc/resolv.conf
 }
 
-un_mount() {
-	local mn
-
-	for mn in $(awk '$2 != "/" &&
-		$2 !~ /^\/(boot|efi|dev|sys|proc|tmp|Debian)/ {print $2}' \
-		/proc/mounts | sort -r)
-	do
-		umount -l "$mn" 2>/dev/null || true
-	done
-}
-
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /Debian/etc/ \
 		2>/dev/null || true
@@ -155,15 +144,26 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	un_mount
+
+	# Try to stop known services
+	for svc in docker kubelet snapd apt-daily.timer \
+		apt-daily.service unattended-upgrades rsyslog
+	do
+		systemctl stop "$svc" --now || true
+		#	>/dev/null 2>&1
+	done
+
+	# Switch single-user & ensure root's rw
+	systemctl isolate rescue.target || true
+	mount -o remount,rw / || true
 }
 
 overwrite_system() {
 	cleanup
 
 	# Galactic smash
-	rsync -aHAX --numeric-ids --delete-after --exclude=/tmp/** \
-		--exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
+	rsync -aHAX --numeric-ids --delete-after --delay-updates \
+		--exclude=/tmp/** --exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
 		--exclude=/Debian/** --exclude=/efi/** --exclude=/boot/** \
 		/Debian/ / || true
 
@@ -215,7 +215,7 @@ overwrite_system() {
 		wamerican x11-common xkb-data cryptsetup cryptsetup-initramfs dmsetup \
 		efibootmgr gdisk lvm2 multipath-tools nvme-cli open-iscsi alsa-utils \
 		rsync sg3-utils smartmontools squashfs-tools open-vm-tools \
-		xfsprogs zfsutils-linux apparmor apt apt-utils ca-certificates fail2ban \
+		xfsprogs zfsutils-linux apparmor apt apt-utils ca-certificates \
 		gnupg gnupg2 gpgconf openssl p11-kit publicsuffix \
 		python3-apt python3-requests python3-setuptools vim-scripts \
 		python3-urllib3 python3-yaml sudo acpid wamerican wamerican-large \
