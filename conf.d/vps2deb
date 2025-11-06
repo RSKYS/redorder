@@ -122,7 +122,13 @@ extract_and_prepare() {
 	INIT
 
 	( cd /tmp/build
-	  docker-buildx build -t base_sys . )
+	if ! command -v docker-buildx >/dev/null 2>&1; then
+		DOCKER_BUILDKIT=1 \
+			docker build -t base_sys .
+	else
+		docker-buildx build -t base_sys . || \
+			echo "This script need's buildx" && exit 1
+	fi )
 
 	docker create --name deb_tmp base_sys
 	docker export deb_tmp -o /tmp/base.tar
