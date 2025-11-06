@@ -150,27 +150,20 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-
-	# Try to stop known services
-	for svc in docker kubelet snapd apt-daily.timer \
-		apt-daily.service unattended-upgrades rsyslog
-	do
-		systemctl stop "$svc" --now || true
-		#	>/dev/null 2>&1
-	done
-
-	# Switch single-user & ensure root's rw
-	systemctl isolate rescue.target || true
-	mount -o remount,rw / || true
+	if command -v chattr >/dev/null 2>&1; then
+		find / -type f \( ! -path '/dev/*' -and ! -path '/proc/*' -and ! -path '/sys/*' \
+			-and ! -path '/selinux/*' -and ! -path "/Debian/*" \) \
+			-exec chattr -i {} + 2>/dev/null || true
+	fi
 }
 
 overwrite_system() {
 	cleanup
 
 	# Galactic smash
-	rsync -aHAX --numeric-ids --delete-after --delay-updates \
-		--exclude=/tmp/** --exclude=/dev/** --exclude=/proc/** --exclude=/sys/** \
-		--exclude=/Debian/** --exclude=/efi/** --exclude=/boot/** \
+	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
+		--exclude=/proc/** --exclude=/sys/** --exclude=/Debian/** \
+		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/Debian/ / || true
 
 	rm -rf /Debian >/dev/null 2>&1 || true
