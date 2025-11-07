@@ -295,6 +295,9 @@ finalize() {
 	After reboot you should be able to login as root with '0v3rk1ll'
 	Change it later how you see it fit ;-)
 	EOF
+
+	( cd / 
+	  ls -a )
 }
 
 choose_option() {
