@@ -176,21 +176,17 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	if command -v chattr >/dev/null 2>&1; then
-		find / -type f \( ! -path '/dev/*' -and ! -path '/proc/*' -and ! -path '/sys/*' \
-			-and ! -path '/selinux/*' -and ! -path "/linux64/*" \) \
-			-exec chattr -i {} + 2>/dev/null || true
-	fi
+	find / \( -type f -o -type d \) -exec chattr -i {} + 2>/dev/null || true
 }
 
 overwrite_current() {
-	cleanup
-
 	# Galactic smash
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** --exclude=/home/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/linux64/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/linux64/ / || true
+
+	cleanup
 
 	rm -rf /linux64 >/dev/null 2>&1 || true
 	( cd /tmp

@@ -127,7 +127,7 @@ extract_and_prepare() {
 			docker build -t base_sys .
 	else
 		docker-buildx build -t base_sys . || \
-			echo "This script need's buildx" && exit 1
+			echo "This script need's buildx"
 	fi )
 
 	docker create --name deb_tmp base_sys
@@ -150,22 +150,17 @@ backup_old_files() {
 cleanup() {
 	rm -rf /boot/efi/* 2>/dev/null || true
 	rm -f /boot/* 2>/dev/null || true
-	if command -v chattr >/dev/null 2>&1; then
-		find / -type f \( ! -path '/dev/*' -and ! -path '/proc/*' -and ! -path '/sys/*' \
-			-and ! -path '/selinux/*' -and ! -path "/Debian/*" \) \
-			-exec chattr -i {} + 2>/dev/null || true
-	fi
+	find / \( -type f -o -type d \) -exec chattr -i {} + 2>/dev/null || true
 }
 
 overwrite_system() {
-	cleanup
-
 	# Galactic smash
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** --exclude=/home/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/Debian/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/Debian/ / || true
 
+	cleanup
 	rm -rf /Debian >/dev/null 2>&1 || true
 
 	cat > /etc/apt/sources.list <<-MGM
@@ -196,9 +191,8 @@ overwrite_system() {
 	apt update
 	apt dist-upgrade --auto-remove -y
 
-	apt install -y --reinstall --no-install-suggests --no-install-recommends \
-		base-files base-passwd bash bash-completion bzip2 coreutils dash debconf \
-		debianutils diffutils dpkg findutils gnupg grep gzip hostname \
+	apt install -y base-files base-passwd bash bash-completion bzip2 coreutils \
+		dash debconf debianutils diffutils dpkg findutils gnupg grep gzip hostname \
 		init-system-helpers iproute2 iputils-ping less logsave lsof mawk \
 		ncurses-base netbase netcat-openbsd passwd perl-base sed sensible-utils \
 		tar util-linux zlib1g initramfs-tools initramfs-tools-core kmod \
