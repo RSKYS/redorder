@@ -161,7 +161,7 @@ overwrite_system() {
 	cleanup
 
 	# Galactic smash
-	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** \
+	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** --exclude=/home/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/Debian/** \
 		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
 		/Debian/ / || true
