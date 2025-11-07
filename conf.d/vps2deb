@@ -191,53 +191,33 @@ overwrite_system() {
 	apt update
 	apt dist-upgrade --auto-remove -y
 
-	apt install -y base-files base-passwd bash bash-completion coreutils \
-		debianutils diffutils dpkg findutils gnupg grep gzip hostname \
-		init-system-helpers iproute2 iputils-ping less logsave lsof mawk \
-		ncurses-base netbase netcat-openbsd passwd perl-base sed sensible-utils \
-		tar util-linux zlib1g initramfs-tools initramfs-tools-core kmod \
-		linux-base linux-image-amd64 systemd-sysv adduser bind9-host \
-		bridge-utils btrfs-progs curl dnsutils ethtool ifupdown isc-dhcp-client \
-		isc-dhcp-common libnss-myhostname libpam-systemd net-tools netplan.io \
-		openssh-client openssh-server tcpdump vlan wget at bc binutils \
-		binutils-x86-64-linux-gnu bsdmainutils byobu command-not-found cron dbus \
-		distro-info-data dosfstools ed file finger htop info iotop lshw ltrace \
-		man-db manpages mdadm mtr-tiny nano parted pciutils powermgmt-base \
-		psmisc python3 python3-minimal readline-common rsyslog screen strace \
-		sysstat tasksel tmux traceroute usbutils uuid-runtime vim \
-		wamerican x11-common xkb-data cryptsetup cryptsetup-initramfs dmsetup \
-		efibootmgr gdisk lvm2 multipath-tools nvme-cli open-iscsi alsa-utils \
-		rsync sg3-utils smartmontools squashfs-tools open-vm-tools \
-		xfsprogs apparmor apt apt-utils ca-certificates fail2ban dash debconf \
-		gnupg gnupg2 gpgconf openssl p11-kit policykit-1 publicsuffix \
-		python3-apt python3-requests python3-setuptools vim-scripts bzip2 \
-		python3-urllib3 python3-yaml sudo acpid wamerican wamerican-large \
-		anacron cpufrequtils dbus-broker utils dmraid dnsmasq-base \
-		dpkg-dev eject fuse3 git git-man grub-common linux-headers-amd64 \
-		grub-efi-amd64 grub2-common hdparm hwdata irqbalance kpartx lm-sensors \
-		logrotate lrzip lxc lxd make manpages-dev memtest86+ modemmanager \
-		moreutils mosh ncdu neofetch netcat-traditional nfs-common \
-		open-vm-tools openvpn os-prober passwd pastebinit patch pciutils pigz \
-		plymouth pm-utils popularity-contest powertop ppp pptp-linux procps \
-		pv python3-cffi-backend python3-chardet python3-configobj \
-		python3-cryptography python3-dbus python3-debian python3-distro \
-		python3-gi python3-idna python3-jinja2 python3-jsonschema python3-lxml \
-		python3-newt python3-oauthlib python3-paramiko pkg-config \
-		python3-pip python3-ply python3-psutil python3-pyasn1 shim-signed \
-		python3-urwid qemu-guest-agent quota radvd rpcbind ruby-net-telnet \
-		rpm rpm2cpio rsnapshot rtkit ruby ruby-json ruby-minitest \
-		ruby-power-assert ruby-test-unit ruby-xmlrpc runc rxvt-unicode safe-rm \
-		samba-common samba-common-bin sane-utils sbcl scdaemon schedtool scrot \
-		seabios secure-delete sgml-base shared-mime-info shellcheck \
-		smartmontools socat software-properties-common sqlite3 ssh-import-id \
-		ssl-cert stress stunnel4 subversion sysbench sysfsutils systemd-coredump \
-		systemd-journal-remote systemd-timesyncd sysvinit-utils t1utils \
-		testdisk texinfo texlive-base texlive-binaries traceroute telnet \
-		texlive-fonts-recommended texlive-latex-base texlive-latex-recommended \
-		thin-provisioning-tools tigervnc-standalone-server tree w3m-img \
-		u-boot-tools udisks2 ufw uget unar vim-runtime vim vbetool \
-		unbound unrar-free unzip usb-modeswitch usbutils uuid-runtime \
-		vde2 vinagre virt-what vorbis-tools w3m fastfetch
+	apt install -y base-files adwaita-icon-theme appstream apt-file at-spi2-core \
+	bcache-tools bolt btrfs-progs build-essential byobu command-not-found \
+	console-setup cron cryptsetup cryptsetup-initramfs dbus-user-session \
+	dconf-gsettings-backend distro-info dosfstools e2fsprogs-l10n eatmydata \
+	ed efibootmgr eject ethtool exfatprogs fastfetch file fonts-dejavu-core \
+	ftp fwupd gdisk git gnome-keyring gnupg-l10n liblvm2cmd2.03 \
+	gpg-wks-client gpg-wks-server grub-efi-amd64 gtk-update-icon-cache \
+	hdparm hicolor-icon-theme htop inetutils-telnet info iptables \
+	iputils-tracepath irqbalance jq krb5-locales lshw lsof lvm2 man-db \
+	manpages mdadm modemmanager mokutil mtr-tiny multipath-tools ncurses-term \
+	netcat-openbsd netplan.io networkd-dispatcher ntfs-3g open-iscsi \
+	openssh-server os-prober overlayroot p11-kit packagekit-tools parted \
+	pastebinit pinentry-curses pinentry-gnome3 plymouth pollinate \
+	powermgmt-base psmisc publicsuffix libblockdev-plugins-all \
+	python3-automat python3-babel python3-bcrypt python3-cffi-backend \
+	python3-charset-normalizer python3-click python3-constantly \
+	python3-debian python3-gdbm python3-hamcrest python3-hyperlink \
+	python3-incremental python3-jaraco.classes python3-keyring libtss2-dev \
+	python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
+	python3-rich python3-secretstorage python3-service-identity \
+	python3-six python3-systemd python3-twisted python3-uritemplate \
+	python3-venv python3-webcolors python3-zipp python3-zope.interface \
+	rsync rsyslog sbsigntool screen sg3-utils sosreport squashfs-tools \
+	ssh-import-id strace systemd-timesyncd tcpdump telnet thermald \
+	thin-provisioning-tools time tpm-udev udisks2 upower usb-modeswitch \
+	usb.ids usbutils usrmerge uuid-runtime wireless-regdb \
+	xdg-user-dirs xfsprogs xml-core zerofree bash-completion bc
 
 	# Making sure one last time
 	dpkg --configure -a
