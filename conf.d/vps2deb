@@ -19,7 +19,7 @@
 set -e
 
 mirror="http://ftp.uk.debian.org"
-version="forky"
+version="bookworm"
 
 if [ "$(id -u)" -ne 0 ]; then
 	echo "This script must be run as root."
@@ -87,6 +87,7 @@ docker_install() {
 
 	getent group docker >/dev/null || groupadd docker
 	usermod -aG docker "$USER"
+	sleep 5
 }
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -143,6 +144,8 @@ extract_and_prepare() {
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /Debian/etc/ \
 		2>/dev/null || true
+	cp -f /etc/fstab /Debian/etc/fstab
+	cp -f /etc/default/grub /Debian/etc/default/grub
 	# Backup the partitions scheme
 	# sgdisk --backup='/tmp/partitions.map' $DISK
 }
@@ -157,7 +160,7 @@ overwrite_system() {
 	# Galactic smash
 	rsync -aHAX --numeric-ids --delete-after --exclude=/dev/** --exclude=/home/** \
 		--exclude=/proc/** --exclude=/sys/** --exclude=/Debian/** \
-		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** \
+		--exclude=/efi/** --exclude=/boot/** --exclude=/tmp/** --exclude=/var/lib/systemd/** \
 		/Debian/ / || true
 
 	cleanup
@@ -191,33 +194,33 @@ overwrite_system() {
 	apt update
 	apt dist-upgrade --auto-remove -y
 
-	apt install -y base-files adwaita-icon-theme appstream apt-file at-spi2-core \
-	bcache-tools bolt btrfs-progs build-essential byobu command-not-found \
-	console-setup cron cryptsetup cryptsetup-initramfs dbus-user-session \
-	dconf-gsettings-backend distro-info dosfstools e2fsprogs-l10n eatmydata \
-	ed efibootmgr eject ethtool exfatprogs fastfetch file fonts-dejavu-core \
-	ftp fwupd gdisk git gnome-keyring gnupg-l10n liblvm2cmd2.03 \
-	gpg-wks-client gpg-wks-server grub-efi-amd64 gtk-update-icon-cache \
-	hdparm hicolor-icon-theme htop inetutils-telnet info iptables \
-	iputils-tracepath irqbalance jq krb5-locales lshw lsof lvm2 man-db \
-	manpages mdadm modemmanager mokutil mtr-tiny multipath-tools ncurses-term \
-	netcat-openbsd netplan.io networkd-dispatcher ntfs-3g open-iscsi \
-	openssh-server os-prober overlayroot p11-kit packagekit-tools parted \
-	pastebinit pinentry-curses pinentry-gnome3 plymouth pollinate \
-	powermgmt-base psmisc publicsuffix libblockdev-plugins-all \
-	python3-automat python3-babel python3-bcrypt python3-cffi-backend \
-	python3-charset-normalizer python3-click python3-constantly \
-	python3-debian python3-gdbm python3-hamcrest python3-hyperlink \
-	python3-incremental python3-jaraco.classes python3-keyring libtss2-dev \
-	python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
-	python3-rich python3-secretstorage python3-service-identity \
-	python3-six python3-systemd python3-twisted python3-uritemplate \
-	python3-venv python3-webcolors python3-zipp python3-zope.interface \
-	rsync rsyslog sbsigntool screen sg3-utils sosreport squashfs-tools \
-	ssh-import-id strace systemd-timesyncd tcpdump telnet thermald \
-	thin-provisioning-tools time tpm-udev udisks2 upower usb-modeswitch \
-	usb.ids usbutils usrmerge uuid-runtime wireless-regdb \
-	xdg-user-dirs xfsprogs xml-core zerofree bash-completion bc
+	apt install -y --reinstall \
+		appstream apt-file at-spi2-core bash-completion bc \
+		bcache-tools bolt btrfs-progs byobu command-not-found console-setup \
+		cryptsetup cryptsetup-initramfs dbus-user-session dconf-gsettings-backend \
+		e2fsprogs-l10n eatmydata ed efibootmgr eject ethtool base-files \
+		exfatprogs file fonts-dejavu-core ftp gdisk gir1.2-packagekitglib-1.0 \
+		gnome-keyring gnome-keyring-pkcs11 gnupg-l10n gpg-wks-client gpg-wks-server \
+		gtk-update-icon-cache hdparm hicolor-icon-theme htop info \
+		iptables iputils-ping irqbalance jq krb5-locales base-passwd \
+		lshw lsof lvm2 man-db manpages mdadm modemmanager mokutil mtr-tiny multipath-tools \
+		ncurses-term netcat-openbsd networkd-dispatcher ntfs-3g open-iscsi \
+		os-prober p11-kit packagekit-tools pastebinit pinentry-curses \
+		plymouth pollinate powermgmt-base psmisc publicsuffix neofetch \
+		python3-babel python3-bcrypt python3-click systemd-sysv neofetch \
+		python3-gdbm python3-hamcrest python3-keyring grub-efi-amd64 \
+		python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
+		python3-rich python3-service-identity linux-image-amd64 \
+		python3-twisted python3-uritemplate python3-venv python3-webcolors python3-zipp \
+		rsync rsyslog sbsigntool screen sg3-utils openssh-server \
+		sosreport squashfs-tools ssh-import-id linux-headers-amd64 \
+		strace tcpdump telnet thermald thin-provisioning-tools time \
+		udisks2 upower usb-modeswitch usb.ids usbutils usrmerge netplan.io \
+		uuid-runtime wireless-regdb xauth xdg-user-dirs xfsprogs xml-core zerofree
+
+	# Fixing shitty recommends/suggests better this way.
+	apt purge openssh-server exim4-base --auto-remove -y
+	apt install openssh-server -y
 
 	# Making sure one last time
 	dpkg --configure -a
@@ -227,49 +230,29 @@ configure_network() {
 	local dev ipaddr prefix gateway net_conf
 
 	dev=$(ls /sys/class/net | grep -Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
-	ipaddr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
-	gateway=$(ip -4 route show default | awk '/default/ {print $3; exit}')
+	macaddr=$(cat /sys/class/net/"$dev"/address 2>/dev/null)
 	net_conf="/etc/netplan/00_default.yaml"
 
 	mkdir -p /etc/netplan
 	rm -rf /etc/netplan/{.*,*} || true
 
-	cat > /etc/network/interfaces <<-EOF
-	auto lo
-	iface lo inet loopback
-
-	allow-hotplug $dev
-	iface $dev inet dhcp
+	cat >"$net_conf" <<-EOF
+	network:
+	  version: 2
+	  ethernets:
+	    $dev:
+	      match:
+	        macaddress: "${macaddr}"
+	      dhcp4: true
+	      set-name: "${dev}"
+	      mtu: 1500
 
 	EOF
-
-	if [ -n "$ipaddr" ] && [ -n "$gateway" ]; then
-		prefix=${ipaddr#*/}
-		cat >"$net_conf" <<-EOF
-		network:
-		  version: 2
-		  renderer: networkd
-		  ethernets:
-		    ${dev}:
-		      addresses:
-		        - ${ipaddr}
-		      gateway4: ${gateway}
-		      nameservers:
-		        addresses: [1.1.1.1]
-		EOF
-	else
-		cat >"$net_conf" <<-EOF
-		network:
-		  version: 2
-		  renderer: networkd
-		  ethernets:
-		    ${dev}:
-		      dhcp4: true
-		EOF
-	fi
-
 	netplan generate
+	systemctl enable systemd-networkd >/dev/null 2>&1 || true
 	netplan apply >/dev/null 2>&1 || true
+	# SSH
+	systemctl enable ssh sshd >/dev/null 2>&1 || true
 }
 
 configure_bootloader() {
@@ -311,7 +294,7 @@ finalize() {
 		fi
 	fi
 
-	echo "\nfastfetch\n" >> /etc/profile
+	echo "\nneofetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
 
 	cat <<-EOF
@@ -340,11 +323,11 @@ choose_option() {
 
 show_menu() {
 	cat <<-EOF
-Supported distributions:
-1) Debian $version    (--debian)
+	Supported distributions:
+	1) Debian $version    (--debian)
 
-Usage: $0 [option_number|--option_name]
-EOF
+	Usage: $0 [option_number|--option_name]
+	EOF
 }
 
 if [ -n "$1" ]; then

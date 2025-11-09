@@ -86,6 +86,7 @@ docker_install() {
 
 	getent group docker >/dev/null || groupadd docker
 	usermod -aG docker "$USER"
+	sleep 5
 }
 
 if ! command -v docker >/dev/null 2>&1; then
@@ -140,9 +141,6 @@ extract_and_prepare() {
 configure_base() {
 	local srv
 
-	cp -f /etc/fstab /linux64/etc/fstab
-	cp -f /etc/default/grub /linux64/etc/default/grub
-
 	if [ -d /linux64/etc/rc.d ]; then
 		for srv in rc.S rc.M rc.local rc.inet1 ; do
 			if [ -f /linux64/etc/rc.d/$srv ]; then
@@ -170,6 +168,8 @@ configure_base() {
 backup_old_files() {
 	cp -fL /etc/hostname /etc/localtime /linux64/etc/ \
 		2>/dev/null || true
+	cp -f /etc/fstab /linux64/etc/fstab
+	cp -f /etc/default/grub /linux64/etc/default/grub
 	# Backup the partitions scheme
 	# sgdisk --backup='/tmp/partitions.map' $DISK
 }
