@@ -19,7 +19,7 @@
 set -e
 
 mirror="http://ftp.uk.debian.org"
-version="bookworm"
+version="trixie"
 
 if [ "$(id -u)" -ne 0 ]; then
 	echo "This script must be run as root."
@@ -206,14 +206,14 @@ overwrite_system() {
 		lshw lsof lvm2 man-db manpages mdadm modemmanager mokutil mtr-tiny multipath-tools \
 		ncurses-term netcat-openbsd networkd-dispatcher ntfs-3g open-iscsi \
 		os-prober p11-kit packagekit-tools pastebinit pinentry-curses \
-		plymouth pollinate powermgmt-base psmisc publicsuffix neofetch \
-		python3-babel python3-bcrypt python3-click systemd-sysv neofetch \
+		plymouth pollinate powermgmt-base psmisc publicsuffix fastfetch \
+		python3-babel python3-bcrypt python3-click systemd-sysv \
 		python3-gdbm python3-hamcrest python3-keyring grub-efi-amd64 \
 		python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
-		python3-rich python3-service-identity linux-image-amd64 \
+		python3-rich python3-service-identity \
 		python3-twisted python3-uritemplate python3-venv python3-webcolors python3-zipp \
 		rsync rsyslog sbsigntool screen sg3-utils openssh-server \
-		sosreport squashfs-tools ssh-import-id linux-headers-amd64 \
+		sosreport squashfs-tools ssh-import-id \
 		strace tcpdump telnet thermald thin-provisioning-tools time \
 		udisks2 upower usb-modeswitch usb.ids usbutils usrmerge netplan.io \
 		uuid-runtime wireless-regdb xauth xdg-user-dirs xfsprogs xml-core zerofree
@@ -221,6 +221,9 @@ overwrite_system() {
 	# Fixing shitty recommends/suggests better this way.
 	apt purge openssh-server exim4-base --auto-remove -y
 	apt install openssh-server -y
+
+	# Installing kernel
+	apt install -y  linux-image-amd64 linux-headers-amd64
 
 	# Making sure one last time
 	dpkg --configure -a
@@ -230,6 +233,8 @@ configure_network() {
 	local dev ipaddr prefix gateway net_conf
 
 	dev=$(ls /sys/class/net | grep -Ev '^(lo|docker|veth|br-|virbr|vmnet|zt|wg)' | head -n1)
+	ipaddr=$(ip -4 -o addr show dev "$dev" scope global | awk '{print $4; exit}')
+	gateway=$(ip -4 route show default | awk '/default/ {print $3; exit}')
 	macaddr=$(cat /sys/class/net/"$dev"/address 2>/dev/null)
 	net_conf="/etc/netplan/00_default.yaml"
 
@@ -243,13 +248,18 @@ configure_network() {
 	    $dev:
 	      match:
 	        macaddress: "${macaddr}"
-	      dhcp4: true
 	      set-name: "${dev}"
+	      addresses:
+	        - ${ipaddr}
+	      routes:
+	        - to: 0.0.0.0/0
+	          via: ${gateway}
+	      nameservers:
+	        addresses:
+	          - 1.1.1.1
 	      mtu: 1500
-
 	EOF
 	netplan generate
-	systemctl enable systemd-networkd >/dev/null 2>&1 || true
 	netplan apply >/dev/null 2>&1 || true
 	# SSH
 	systemctl enable ssh sshd >/dev/null 2>&1 || true
@@ -275,8 +285,7 @@ configure_bootloader() {
 		sed -i.bak 's/use_lvmetad = 1/use_lvmetad = 0/g' /etc/lvm/lvm.conf 2>/dev/null
 	fi
 
-	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
-	grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
+	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi 
 
 	if [ -f /etc/lvm/lvm.conf.bak ]; then
 		mv /etc/lvm/lvm.conf.bak /etc/lvm/lvm.conf 2>/dev/null
@@ -294,8 +303,10 @@ finalize() {
 		fi
 	fi
 
-	echo "\nneofetch\n" >> /etc/profile
+	echo "\nfastfetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
+
+	grub-mkconfig -o /boot/grub/grub.cfg
 
 	cat <<-EOF
 	Hey there,
