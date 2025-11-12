@@ -19,7 +19,7 @@
 set -e
 
 mirror="http://ftp.uk.debian.org"
-version="trixie"
+version="bookworm"
 
 if [ "$(id -u)" -ne 0 ]; then
 	echo "This script must be run as root."
@@ -206,7 +206,7 @@ overwrite_system() {
 		lshw lsof lvm2 man-db manpages mdadm modemmanager mokutil mtr-tiny multipath-tools \
 		ncurses-term netcat-openbsd networkd-dispatcher ntfs-3g open-iscsi \
 		os-prober p11-kit packagekit-tools pastebinit pinentry-curses \
-		plymouth pollinate powermgmt-base psmisc publicsuffix fastfetch \
+		plymouth pollinate powermgmt-base psmisc publicsuffix neofetch \
 		python3-babel python3-bcrypt python3-click systemd-sysv \
 		python3-gdbm python3-hamcrest python3-keyring grub-efi-amd64 \
 		python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
@@ -303,7 +303,7 @@ finalize() {
 		fi
 	fi
 
-	echo "\nfastfetch\n" >> /etc/profile
+	echo "\nneofetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
 
 	grub-mkconfig -o /boot/grub/grub.cfg

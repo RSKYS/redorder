@@ -261,7 +261,6 @@ configure_bootloader() {
 	removepkg elilo lilo >/dev/null 2>&1 || true
 	$(/usr/share/mkinitrd/mkinitrd_command_generator.sh -k $(ls /lib/modules) | grep 'mkinitrd -c')
 	grub-install --force --removable --target=x86_64-efi --efi-directory=/boot/efi
-	grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
 
 	if [ -f /etc/lvm/lvm.conf.bak ]; then
 		mv /etc/lvm/lvm.conf.bak /etc/lvm/lvm.conf 2>/dev/null
@@ -285,6 +284,8 @@ finalize() {
 
 	echo "\nneofetch\n" >> /etc/profile
 	echo 'root:0v3rk1ll' | chpasswd
+
+	grub-mkconfig -o /boot/grub/grub.cfg 2>/dev/null
 
 	cat <<-EOF
 	Hey there,
