@@ -210,7 +210,7 @@ overwrite_system() {
 		python3-babel python3-bcrypt python3-click systemd-sysv \
 		python3-gdbm python3-hamcrest python3-keyring grub-efi-amd64 \
 		python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
-		python3-rich python3-service-identity \
+		python3-rich python3-service-identity git curl \
 		python3-twisted python3-uritemplate python3-venv python3-webcolors python3-zipp \
 		rsync rsyslog sbsigntool screen sg3-utils openssh-server \
 		sosreport squashfs-tools ssh-import-id \
@@ -219,7 +219,7 @@ overwrite_system() {
 		uuid-runtime wireless-regdb xauth xdg-user-dirs xfsprogs xml-core zerofree
 
 	# Fixing shitty recommends/suggests better this way.
-	apt purge openssh-server exim4-base --auto-remove -y
+	apt purge openssh-server exim4-base --auto-remove -y || true
 	apt install openssh-server -y
 
 	# Installing kernel

@@ -14,7 +14,12 @@ Red Order is where the rules are rewritten and the boundaries are pushed.
 wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/master/redorder | sh
 ```
 
-⚠️ **Btw, your root will be purged permanently!**
+### And for Debian directly:
+```
+wget --no-check-certificate -O- https://raw.githubusercontent.com/RSKYS/redorder/refs/heads/master/conf.d/vps2deb | sh
+```
+
+⚠️ **Careful, your root will be purged permanently!**
 
 ## TODO
 🎶 Consider a donation as I'm really doing these outta personal use, toss a little [coin] if you like.
