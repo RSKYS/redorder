@@ -210,13 +210,34 @@ overwrite_system() {
 		python3-babel python3-bcrypt python3-click systemd-sysv \
 		python3-gdbm python3-hamcrest python3-keyring grub-efi-amd64 \
 		python3-lazr.restfulclient python3-openssl python3-pip python3-rfc3987 \
-		python3-rich python3-service-identity git curl \
+		python3-rich python3-service-identity git curl systemd-timesyncd \
 		python3-twisted python3-uritemplate python3-venv python3-webcolors python3-zipp \
 		rsync rsyslog sbsigntool screen sg3-utils openssh-server \
-		sosreport squashfs-tools ssh-import-id \
+		sosreport squashfs-tools ssh-import-id bind9 bind9-utils \
 		strace tcpdump telnet thermald thin-provisioning-tools time \
 		udisks2 upower usb-modeswitch usb.ids usbutils usrmerge netplan.io \
 		uuid-runtime wireless-regdb xauth xdg-user-dirs xfsprogs xml-core zerofree
+
+	# Fixing it for somewhere I need.
+	cat > /etc/systemd/system/bind9.service <<-EOF
+	[Unit]
+	Description=BIND Domain Name Server
+	Documentation=man:named(8)
+	After=network.target
+	Wants=nss-lookup.target
+	Before=nss-lookup.target
+
+	[Service]
+	EnvironmentFile=-/etc/default/named
+	ExecStart=/usr/sbin/named -f \$OPTIONS
+	ExecReload=/usr/sbin/rndc reload
+	ExecStop=/usr/sbin/rndc stop
+	Restart=on-failure
+
+	[Install]
+	WantedBy=multi-user.target
+	Alias=bind9.service
+	EOF
 
 	# Fixing shitty recommends/suggests better this way.
 	apt purge openssh-server exim4-base --auto-remove -y || true
